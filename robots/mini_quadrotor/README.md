@@ -13,3 +13,9 @@ In another terminal, run
 In this terminal, input `r` to arm the quadrotor, then input `t` to takeoff. The quadrotor will takeoff and hover.
 
 Input `l` to land the quadrotor.
+
+## For Draugas
+
+```
+roslaunch mini_quadrotor bringup.launch real_machine:=false simulation:=True headless:=False direct_model:=True direct_model_name:=$(rospack find mini_quadrotor)/urdf/draugas.urdf spawn_z:=0.5
+```

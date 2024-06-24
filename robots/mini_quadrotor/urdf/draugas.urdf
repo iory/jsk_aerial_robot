@@ -1,0 +1,387 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<robot name="draugas">
+  <!-- general attribute -->
+  <baselink name="fc"/>
+  <thrust_link name="thrust"/>
+  <!-- dynamics -->
+  <m_f_rate value="-0.011"/>
+  <!-- [N] -->
+  <!-- dummy root link for KDL -->
+  <link name="root">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0.00001"/>
+      <inertia ixx="0.000001" ixy="0.0" ixz="0.0" iyy="0.000001" iyz="0.0" izz="0.000002"/>
+    </inertial>
+  </link>
+  <joint name="root_joint" type="fixed">
+    <parent link="root"/>
+    <child link="main_body"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <link name="main_body">
+    <inertial>
+      <origin xyz="0.0010595 0.00011639 -0.012568" rpy="0.0 -0.0 0.0"/>
+      <mass value="0.63218"/>
+      <inertia ixx="0.0018195" ixy="-5.4991e-07" ixz="-4.4686e-05" iyy="0.0018026" iyz="3.2814e-07" izz="0.0028489"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://mini_quadrotor/urdf/draugas/mesh/main_body.dae"/>
+      </geometry>
+      <material name=""/>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 -0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://mini_quadrotor/urdf/draugas/mesh/main_body.dae"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 -0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="thrust1">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0.0 -0.0 0.0"/>
+      <mass value="0.0091"/>
+      <inertia ixx="8.07e-06" ixy="0.0" ixz="0.0" iyy="8.07e-06" iyz="0.0" izz="8.07e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://mini_quadrotor/urdf/mesh/prop_5inch.dae"/>
+      </geometry>
+      <material name=""/>
+      <origin xyz="0 0 0" rpy="0.0 -0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://mini_quadrotor/urdf/mesh/prop_5inch.dae"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0.0 -0.0 0.0"/>
+    </collision>
+  </link>
+
+  <link name="thrust2">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0.0 -0.0 0.0"/>
+      <mass value="0.0091"/>
+      <inertia ixx="8.07e-06" ixy="0.0" ixz="0.0" iyy="8.07e-06" iyz="0.0" izz="1.612e-05"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://mini_quadrotor/urdf/mesh/prop_5inch.dae"/>
+      </geometry>
+      <material name=""/>
+      <origin xyz="0 0 0" rpy="0.0 -0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://mini_quadrotor/urdf/mesh/prop_5inch.dae"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0.0 -0.0 0.0"/>
+    </collision>
+  </link>
+
+  <link name="thrust3">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0.0 -0.0 0.0"/>
+      <mass value="0.0091"/>
+      <inertia ixx="8.07e-06" ixy="0.0" ixz="0.0" iyy="8.07e-06" iyz="0.0" izz="8.07e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://mini_quadrotor/urdf/mesh/prop_5inch.dae"/>
+      </geometry>
+      <material name=""/>
+      <origin xyz="0 0 0" rpy="0.0 -0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://mini_quadrotor/urdf/mesh/prop_5inch.dae"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0.0 -0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="thrust4">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0.0 -0.0 0.0"/>
+      <mass value="0.0091"/>
+      <inertia ixx="8.07e-06" ixy="0.0" ixz="0.0" iyy="8.07e-06" iyz="0.0" izz="8.07e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://mini_quadrotor/urdf/mesh/prop_5inch.dae"/>
+      </geometry>
+      <material name=""/>
+      <origin xyz="0 0 0" rpy="0.0 -0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://mini_quadrotor/urdf/mesh/prop_5inch.dae"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0.0 -0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="fc">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0.0 -0.0 0.0"/>
+      <mass value="0.0"/>
+      <inertia ixx="0.0" ixy="0.0" ixz="0.0" iyy="0.0" iyz="0.0" izz="0.0"/>
+    </inertial>
+  </link>
+  <link name="lidar_imu">
+    <inertial>
+      <origin xyz="1.3653381121928e-18 -1.1302079071185e-17 -0.0567491000000001" rpy="0.0 -0.0 0.0"/>
+      <mass value="0.141887293339327" />
+      <inertia ixx="4.17977149194091E-05" ixy="-5.51344422604717E-09" ixz="3.05322161876877E-07" iyy="4.50773131493365E-05" iyz="-4.4903103614793E-10" izz="6.87997954815741E-05" />
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://mini_quadrotor/urdf/draugas/mesh/lidar_imu.dae"/>
+      </geometry>
+      <material name=""/>
+      <origin xyz="1.3653381121928e-18 -1.1302079071185e-17 -0.0567491000000001" rpy="9.91627278961755e-17 1.73217807743022e-15 1.86624231178475e-12"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://mini_quadrotor/urdf/draugas/mesh/lidar_imu.dae"/>
+      </geometry>
+      <origin xyz="1.3653381121928e-18 -1.1302079071185e-17 -0.0567491000000001" rpy="9.91627278961755e-17 1.73217807743022e-15 1.86624231178475e-12"/>
+    </collision>
+  </link>
+  <joint name="rotor1" type="continuous">
+    <limit effort="100.0" velocity="0.5" lower="0.0" upper="8.0"/>
+    <parent link="main_body"/>
+    <child link="thrust1"/>
+    <axis xyz="0. 0. -1."/>
+    <origin xyz="-0.074246 -0.074246 0.0099" rpy="0.0 -0.0 0.0"/>
+  </joint>
+  <joint name="rotor2" type="continuous">
+    <limit effort="100.0" velocity="0.5" lower="0.0" upper="8.0"/>
+    <parent link="main_body"/>
+    <child link="thrust2"/>
+    <axis xyz=" 0.  0. 1."/>
+    <origin xyz="0.074246 -0.074246 0.0099" rpy="0.0 -0.0 0.0"/>
+  </joint>
+  <joint name="rotor3" type="continuous">
+    <limit effort="100.0" velocity="0.5" lower="0.0" upper="8.0"/>
+    <parent link="main_body"/>
+    <child link="thrust3"/>
+    <axis xyz="0. 0. -1."/>
+    <origin xyz="0.074246 0.074246 0.0099" rpy="0.0 -0.0 0.0"/>
+  </joint>
+  <joint name="rotor4" type="continuous">
+    <limit effort="100.0" velocity="0.5" lower="0.0" upper="8.0"/>
+    <parent link="main_body"/>
+    <child link="thrust4"/>
+    <axis xyz="0. 0. 1."/>
+    <origin xyz="-0.074246 0.074246 0.0099" rpy="0.0 -0.0 0.0"/>
+  </joint>
+  <joint name="main_body2fc" type="fixed">
+    <limit effort="0.0" velocity="0.0"/>
+    <parent link="main_body"/>
+    <child link="fc"/>
+    <axis xyz="0. 0. 0."/>
+    <origin xyz="0.0 0.0 0.012798" rpy="0.0 -0.0 0.7854000000000001"/>
+  </joint>
+  <joint name="main_body2lidar_imu" type="fixed">
+    <limit effort="0.0" velocity="0.0"/>
+    <parent link="main_body"/>
+    <child link="lidar_imu"/>
+    <axis xyz="0. 0. 0."/>
+    <origin xyz="0.0 0.0 0.0567491000000001" rpy="0.0 -0.0 0.0"/>
+  </joint>
+  <material name="">
+    <color rgba="0.49804 0.49804 0.49804 1.     "/>
+  </material>
+
+
+  <gazebo reference="main_body">
+    <dampingFactor>0.00</dampingFactor>
+  </gazebo>
+  <transmission name="rotor_tran1">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="rotor1">
+      <!-- TODO: effort is torque, maybe position is enough -->
+      <hardwareInterface>RotorInterface</hardwareInterface>
+    </joint>
+    <actuator name="rotor1">
+      <!-- TODO: effort is torque, maybe position is enough -->
+      <hardwareInterface>RotorInterface</hardwareInterface>
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>
+
+  <gazebo reference="main_body">
+    <dampingFactor>0.00</dampingFactor>
+  </gazebo>
+  <transmission name="rotor_tran2">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="rotor2">
+      <!-- TODO: effort is torque, maybe position is enough -->
+      <hardwareInterface>RotorInterface</hardwareInterface>
+    </joint>
+    <actuator name="rotor2">
+      <!-- TODO: effort is torque, maybe position is enough -->
+      <hardwareInterface>RotorInterface</hardwareInterface>
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>
+
+  <gazebo reference="main_body">
+    <dampingFactor>0.00</dampingFactor>
+  </gazebo>
+  <transmission name="rotor_tran3">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="rotor3">
+      <!-- TODO: effort is torque, maybe position is enough -->
+      <hardwareInterface>RotorInterface</hardwareInterface>
+    </joint>
+    <actuator name="rotor3">
+      <!-- TODO: effort is torque, maybe position is enough -->
+      <hardwareInterface>RotorInterface</hardwareInterface>
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>
+
+
+  <gazebo reference="main_body">
+    <dampingFactor>0.00</dampingFactor>
+  </gazebo>
+  <transmission name="rotor_tran4">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="rotor4">
+      <!-- TODO: effort is torque, maybe position is enough -->
+      <hardwareInterface>RotorInterface</hardwareInterface>
+    </joint>
+    <actuator name="rotor4">
+      <!-- TODO: effort is torque, maybe position is enough -->
+      <hardwareInterface>RotorInterface</hardwareInterface>
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>
+
+
+  <!-- gazebo elements: spinal interface -->
+  <gazebo>
+    <plugin filename="libgazebo_ros_control.so" name="gazebo_ros_control">
+      <robotNamespace>quadrotor</robotNamespace>
+      <robotSimType>gazebo_ros_control/AerialRobotHWSim</robotSimType>
+    </plugin>
+  </gazebo>
+  <!-- imu plugin -->
+  <!--
+        note1: please do not use hector_gazebo_ros_imu, which calculates the acceleration in the parent link of the imu frame (e.g. fc -> link2)
+        note2: please do not trust the acceleration value from the multilinked model. Since the acceleration is calculated from the differential of veloctity (see https://bitbucket.org/osrf/gazebo/src/cde54284e90b59a9af9fade096946c0cd4a91c44/gazebo/sensors/ImuSensor.cc#lines-366:367). The internal force from joint create a very unstable acceleration to the link. Anyway, you can test the sensor fusio for general multirotor and transformable robot with only hovering motion.
+    -->
+  <gazebo reference="fc">
+    <sensor name="spinal_imu" type="imu">
+      <imu>
+        <angular_velocity>
+          <x>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>2e-4</stddev>
+              <bias_mean>0.0000075</bias_mean>
+              <bias_stddev>0.0000008</bias_stddev>
+            </noise>
+          </x>
+          <y>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>2e-4</stddev>
+              <bias_mean>0.0000075</bias_mean>
+              <bias_stddev>0.0000008</bias_stddev>
+            </noise>
+          </y>
+          <z>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>2e-4</stddev>
+              <bias_mean>0.0000075</bias_mean>
+              <bias_stddev>0.0000008</bias_stddev>
+            </noise>
+          </z>
+        </angular_velocity>
+        <linear_acceleration>
+          <x>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>1.7e-2</stddev>
+              <bias_mean>0.1</bias_mean>
+              <bias_stddev>0.001</bias_stddev>
+            </noise>
+          </x>
+          <y>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>1.7e-2</stddev>
+              <bias_mean>0.1</bias_mean>
+              <bias_stddev>0.001</bias_stddev>
+            </noise>
+          </y>
+          <z>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>1.7e-2</stddev>
+              <bias_mean>0.1</bias_mean>
+              <bias_stddev>0.001</bias_stddev>
+            </noise>
+          </z>
+        </linear_acceleration>
+      </imu>
+      <always_on>1</always_on>
+      <update_rate>1000</update_rate>
+    </sensor>
+  </gazebo>
+  <!-- magnetometer plugin -->
+  <gazebo reference="magnet">
+    <sensor name="magnetometer" type="magnetometer">
+      <magnetometer>
+        <x>
+          <noise type="gaussian">
+            <mean>0.0</mean>
+            <stddev>1.7e-2</stddev>
+            <bias_mean>0.05</bias_mean>
+            <bias_stddev>0.01</bias_stddev>
+          </noise>
+        </x>
+        <y>
+          <noise type="gaussian">
+            <mean>0.0</mean>
+            <stddev>1.7e-2</stddev>
+            <bias_mean>0.05</bias_mean>
+            <bias_stddev>0.01</bias_stddev>
+          </noise>
+        </y>
+        <z>
+          <noise type="gaussian">
+            <mean>0.0</mean>
+            <stddev>1.7e-2</stddev>
+            <bias_mean>0.5</bias_mean>
+            <bias_stddev>0.01</bias_stddev>
+          </noise>
+        </z>
+      </magnetometer>
+      <always_on>1</always_on>
+      <update_rate>1000</update_rate>
+    </sensor>
+  </gazebo>
+  <!-- gps plugin -->
+  <gazebo>
+    <plugin filename="libhector_gazebo_ros_gps.so" name="gps_controller">
+      <robotNamespace>quadrotor</robotNamespace>
+      <updateRate>5.0</updateRate>
+      <bodyName>gps</bodyName>
+      <topicName>sim/gps/fix</topicName>
+      <velocityTopicName>sim/gps/velocity</velocityTopicName>
+    </plugin>
+  </gazebo>
+  <gazebo reference="main_body">
+    <mu1>0.1</mu1>
+    <mu2>0.1</mu2>
+  </gazebo>
+
+
+</robot>
