@@ -19,3 +19,9 @@ Input `l` to land the quadrotor.
 ```
 roslaunch mini_quadrotor bringup.launch real_machine:=false simulation:=True headless:=False direct_model:=True direct_model_name:=$(rospack find mini_quadrotor)/urdf/draugas.urdf spawn_z:=0.5
 ```
+
+### Use real
+
+```
+roslaunch mini_quadrotor bringup.launch real_machine:=true simulation:=false headless:=true direct_model:=True direct_model_name:=$(rospack find mini_quadrotor)/urdf/draugas.urdf spawn_z:=0.5 estimate_mode:=0
+```
