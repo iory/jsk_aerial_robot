@@ -1,0 +1,37 @@
+repositories:
+  aerial_robot_3rdparty:
+    type: git
+    url: https://github.com/JSKAerialRobot/aerial_robot_3rdparty.git
+    version: b10f5bf2bb2dfb35b30228beb7f13cb6cb1a74f6
+  fast_lio:
+    type: git
+    url: https://github.com/tongtybj/FAST_LIO
+    version: PR/odometry
+  jsk_aerial_robot:
+    type: git
+    url: https://github.com/iory/jsk_aerial_robot
+    version: draugas
+  kalman_filter:
+    type: git
+    url: https://github.com/JSKAerialRobot/kalman_filter.git
+    version: master
+  livox_ros_driver2:
+    type: git
+    url: https://github.com/tongtybj/livox_ros_driver2.git
+    version: PR/ros1
+  ros_numpy:
+    type: git
+    url: https://github.com/eric-wieser/ros_numpy
+    version: master
+  rosserial:
+    type: git
+    url: https://github.com/tongtybj/rosserial.git
+    version: rosservice_server
+  sensor_interface:
+    type: git
+    url: https://github.com/JSKAerialRobot/sensor_interface.git
+    version: c4570c057cda7a36041c1022669fe4c0fc473bee
+  ublox_gps:
+    type: git
+    url: https://github.com/tongtybj/ublox.git
+    version: holybro_rtk_m8p
