@@ -265,7 +265,7 @@ Visualization Manager:
           Show Trail: false
           Value: true
       Name: RobotModel
-      Robot Description: hydrus/robot_description
+      Robot Description: hydrus/robot_description_rviz
       TF Prefix: hydrus
       Update Interval: 0
       Value: true

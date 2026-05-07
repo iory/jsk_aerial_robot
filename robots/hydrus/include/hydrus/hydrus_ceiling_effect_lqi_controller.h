@@ -2,7 +2,7 @@
 /*********************************************************************
  * Software License Agreement (BSD License)
  *
- *  Copyright (c) 2020, JSK Lab
+ *  Copyright (c) 2016, JSK Lab
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -35,17 +35,21 @@
 
 #pragma once
 
-#include <aerial_robot_control/control/under_actuated_tilted_lqi_controller.h>
-#include <spinal/PMatrixPseudoInverseWithInertia.h>
-#include <thread>
+#include <aerial_robot_control/control/under_actuated_lqi_controller.h>
+#include <hydrus/hydrus_robot_model.h>
+#include <tf/transform_listener.h>
+#include <spinal/FourAxisCommand.h>
+#include <std_msgs/Float64.h>
+#include <std_msgs/Float64MultiArray.h>
 
 namespace aerial_robot_control
 {
-  class HydrusTiltedCeilingEffectLQIController: public UnderActuatedTiltedLQIController
+  class HydrusCeilingEffectLQIController: public UnderActuatedLQIController
   {
+
   public:
-    HydrusTiltedCeilingEffectLQIController();
-    ~HydrusTiltedCeilingEffectLQIController() = default;
+    HydrusCeilingEffectLQIController();
+    virtual ~HydrusCeilingEffectLQIController() = default;
 
     void initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
                     boost::shared_ptr<aerial_robot_model::RobotModel> robot_model,
@@ -54,6 +58,33 @@ namespace aerial_robot_control
                     double ctrl_loop_rate);
 
   protected:
+
     bool checkRobotModel() override;
+    
+    //controller update()
+    void controlCore() override;
+    void sendFourAxisCommand() override;
+
+    //ceiling effect related functions
+    bool updateCeilingEffectParams();
+    bool updateCeilingDistance();
+    bool updateRotorDistances();
+    void updateCeilingEffectGain();
+    void compensateBaseThrust(std::vector<float>& compensated_base_thrust);
+    
+    //get tf
+    tf::TransformListener tf_listener_;
+
+    //ceiling effect related parameters
+    double rotor_radius_;
+    double ceiling_height_;
+    double ceiling_distance_;
+    double ceiling_distance_ratio_;
+    std::vector<double> rotor_distance_;
+    std::vector<double> rotor_distance_ratio_;
+    std::vector<double> ceiling_effect_gain_;
+    ros::Publisher ceiling_distance_ratio_pub_;
+    ros::Publisher rotor_distance_ratio_pub_;
+    ros::Publisher ceiling_effect_gain_pub_;
   };
 };

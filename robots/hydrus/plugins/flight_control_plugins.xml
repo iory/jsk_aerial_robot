@@ -2,11 +2,10 @@
   <class name="aerial_robot_control/hydrus_lqi_controller" type="aerial_robot_control::HydrusLQIController" base_class_type="aerial_robot_control::ControlBase">
     <description>LQI based controller for under-actuated hydrus</description>
   </class>
+  <class name="aerial_robot_control/hydrus_ceiling_effect_lqi_controller" type="aerial_robot_control::HydrusCeilingEffectLQIController" base_class_type="aerial_robot_control::ControlBase">
+    <description>LQI based controller for under-actuated hydrus with ceiling effect</description>
+  </class>
   <class name="aerial_robot_control/hydrus_tilted_lqi_controller" type="aerial_robot_control::HydrusTiltedLQIController" base_class_type="aerial_robot_control::ControlBase">
     <description>LQI based controller for under-actuated tilted hydrus</description>
   </class>
-  <class name="aerial_robot_control/hydrus_tilted_ceiling_effect_lqi_controller" type="aerial_robot_control::HydrusTiltedCeilingEffectLQIController" base_class_type="aerial_robot_control::ControlBase">
-    <description>LQI based controller for under-actuated tilted hydrus with ceiling effect</description>
-  </class>
-
 </library>

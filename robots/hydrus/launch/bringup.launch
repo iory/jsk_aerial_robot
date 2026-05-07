@@ -4,7 +4,8 @@
   <arg name="real_machine" default="True" />
   <arg name="simulation" default="False" />
   <arg name="type" default="quad" />
-  <arg name="onboards_model" default="tilt_20deg_201907" />
+  <!-- <arg name="onboards_model" default="tilt_20deg_201907" /> -->
+  <arg name="onboards_model" default="tilt_0deg_ce_15inch_202604" />
   <arg name="estimate_mode"  default= "0" />
   <arg name="sim_estimate_mode"  default= "2" />
   <arg name="headless" default="True" />
@@ -70,6 +71,10 @@
     <arg name="headless" value="$(arg headless)" />
     <arg name="robot_model" value="$(find hydrus)/robots/$(arg type)/$(arg onboards_model)/robot.$(arg description_mode).xacro" unless="$(arg direct_model)"/>
     <arg name="robot_model" value="$(arg direct_model_name)" if="$(arg direct_model)"/>
+    <!-- Gazebo：STL -->
+    <arg name="model_options" value="mesh_ext:=stl" />
+    <!-- RViz：DAE -->
+    <arg name="rviz_model_options" value="mesh_ext:=dae" />
     <arg name="robot_ns" value="$(arg robot_ns)" />
     <arg name="rviz_config" value="$(find hydrus)/config/rviz_config" />
     <arg name="rviz_init_pose" value="$(arg config_dir)/RvizInit.yaml" />

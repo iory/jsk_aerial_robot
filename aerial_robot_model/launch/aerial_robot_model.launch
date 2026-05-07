@@ -2,6 +2,7 @@
   <arg name="headless" default="false" />
   <arg name="need_joint_state" default="true"/>
   <arg name="model_options" default=""/>
+  <arg name="rviz_model_options" default=""/>
   <arg name="robot_model" />
   <arg name="robot_ns" />
   <arg name="rviz_init_pose" />
@@ -10,7 +11,8 @@
   <group ns="$(arg robot_ns)">
     <!-- set robot_description to rosparameter server -->
     <param name="robot_description" command="$(find xacro)/xacro '$(arg robot_model)' robot_name:=$(arg robot_ns)  $(arg model_options)" />
-
+    <param name="robot_description_rviz" command="$(find xacro)/xacro '$(arg robot_model)' robot_name:=$(arg robot_ns)  $(arg rviz_model_options)" /> 
+    
     <!-- joint state publisher if necessary -->
     <rosparam file ="$(arg rviz_init_pose)" command="load"/>
     <node name="$(anon joint_state_publisher_gui)" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui" if="$(arg need_joint_state)">
