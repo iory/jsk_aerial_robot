@@ -3,7 +3,7 @@
     xmlns:xacro="http://www.ros.org/wiki/xacro" name="hydrus_link" >
 
   <!-- D-H kai description(different from prof.nakamura) -->
-  <xacro:macro name="hydrus_link" params="links self rotor_direction with_leg:=1 with_battery:=1 old_version:=0 tilt_mode:=0 tilt_angle:=0 prop_15inch:=0">
+  <xacro:macro name="hydrus_link" params="links self rotor_direction with_leg:=1 with_battery:=1 old_version:=0 tilt_mode:=0 tilt_angle:=0 prop_15inch:=0 mesh_ext:=dae support_ce:=0">
 
     <xacro:if value="${old_version == 1}">
       <!-- link -->
@@ -17,7 +17,7 @@
                 ixx="0.001804" iyy="0.017972" izz="0.019248"
                 ixy="0.000021" ixz="0.000372" iyz="0.000000"/>
           </inertial>
-          <xacro:link_model type="head" />
+          <xacro:link_model type="head" mesh_ext="${mesh_ext}" />
         </xacro:if>
 
         <xacro:unless value="${self == 1}">
@@ -31,7 +31,7 @@
                   ixx="0.001758" iyy="0.013619" izz="0.014910"
                   ixy="0.000020" ixz="-0.000076" iyz="0.000000"/>
             </inertial>
-            <xacro:link_model type="end" />
+            <xacro:link_model type="end" mesh_ext="${mesh_ext}" />
           </xacro:if>
 
           <xacro:unless value="${self == links}">
@@ -43,7 +43,7 @@
                   ixx="0.001828" iyy="0.021127" izz="0.022388"
                   ixy="0.000021" ixz="0.000260" iyz="0.000000"/>
             </inertial>
-            <xacro:link_model type="general" />
+            <xacro:link_model type="general" mesh_ext="${mesh_ext}" />
           </xacro:unless>
 
         </xacro:unless>
@@ -84,7 +84,7 @@
                   ixy="0.00000" ixz="0.00067" iyz="0.00000"/>
             </inertial>
           </xacro:unless>
-          <xacro:link_model type="1" />
+          <xacro:link_model type="1" mesh_ext="${mesh_ext}" />
         </xacro:if>
 
         <xacro:unless value="${self == 1}">
@@ -116,11 +116,11 @@
                 <origin xyz="${link_length * 0.5 -0.058} 0.0 0.0188" rpy="0 0 0"/>
                 <mass value="0.590"/> <!-- +DCDC -->
                 <inertia
-                    ixx="0.00179" iyy="0.01581" izz="0.01692"
-                    ixy="0.00000" ixz="-0.00067" iyz="0.00000"/>
+                    ixx="0.00040638959" ixy="0.00000778848" ixz="-0.00096295536"
+                    iyy="0.01635382606" iyz="-0.00000232615" izz="0.01606515391"/>
               </inertial>
             </xacro:unless>
-            <xacro:link_model type="4" />
+            <xacro:link_model type="4" mesh_ext="${mesh_ext}" />
           </xacro:if>
 
 
@@ -149,14 +149,14 @@
               </xacro:if>
               <xacro:unless value="${tilt_mode == 1}">
                 <inertial>
-                  <origin xyz="${link_length * 0.5} 0.0 0.01287" rpy="0 0 0"/>
+                  <origin xyz="0.32860 0.00000 0.01523" rpy="0 0 0"/>
                   <mass value="0.55744"/>
                   <inertia
-                      ixx="0.00171" iyy="0.01727" izz="0.01844"
-                      ixy="0.00000" ixz="0.00001" iyz="0.00000"/>
+                      ixx="0.00038023587" ixy="0.00000386183" ixz="0.00082294684"
+                      iyy="0.01861673811" iyz="0.00000214317" izz="0.01835189951"/>
                 </inertial>
               </xacro:unless>
-              <xacro:link_model type="2" />
+              <xacro:link_model type="2" mesh_ext="${mesh_ext}" />
             </xacro:if>
             <!-- general -->
             <xacro:unless value="${self == links/2}">
@@ -182,14 +182,14 @@
               </xacro:if>
               <xacro:unless value="${tilt_mode == 1}">
                 <inertial>
-                  <origin xyz="${link_length * 0.5 - 0.0317} 0.0 0.01836" rpy="0 0 0"/>
+                  <origin xyz="0.31840 -0.00006 0.00765" rpy="0 0 0"/>
                   <mass value="0.63453"/>
                   <inertia
-                      ixx="0.00182" iyy="0.02232" izz="0.02254"
-                      ixy="0.00000" ixz="-0.00077" iyz="0.00000"/>
+                      ixx="0.00029131008" ixy="-0.00000514804" ixz="0.00001047486"
+                      iyy="0.02355504631" iyz="0.00000120004" izz="0.02339409703"/>
                 </inertial>
               </xacro:unless>
-              <xacro:link_model type="3" />
+              <xacro:link_model type="3" mesh_ext="${mesh_ext}"/>
             </xacro:unless>
           </xacro:unless>
         </xacro:unless>
@@ -212,7 +212,21 @@
         </xacro:unless>
       </xacro:if>
       <xacro:unless value="${tilt_mode == 1}">
-        <origin rpy="0 0 0" xyz="${link_length* 0.5} 0 0.013"/>
+        <xacro:if value="${self == 1}">
+          <origin rpy="0 0 0" xyz="${link_length*0.5-0.010} 0.000 0.013"/>
+        </xacro:if>
+
+        <xacro:if value="${self == 2}">
+          <origin rpy="0 0 0" xyz="${link_length_2*0.5+0.0125} 0.000 0.013"/>
+        </xacro:if>
+
+        <xacro:if value="${self == 3}">
+          <origin rpy="0 0 0" xyz="${link_length_3*0.5+0.01375} 0.000 0.013"/>
+        </xacro:if>
+
+        <xacro:if value="${self == 4}">
+          <origin rpy="0 0 0" xyz="${link_length_2*0.5+0.01375} 0.000 0.013"/>
+        </xacro:if>
       </xacro:unless>
       <axis xyz="0 0 ${rotor_direction}"/>
     </joint>
@@ -264,6 +278,38 @@
       </xacro:extra_module>
     </xacro:if>
 
+    <!-- support_ce module -->
+    <xacro:if value="${support_ce == 1}">
+      <!-- support_ce1: link1 -->
+      <xacro:if value="${self == 1}">
+        <xacro:support_ce_module name="support_ce1" parent="link1">
+          <origin xyz="${head_leg_offset} 0.0 0.01" rpy="0 0 0"/>
+        </xacro:support_ce_module>
+      </xacro:if>
+
+      <!-- support_ce2: link2 -->
+      <xacro:if value="${self == 2}">
+        <xacro:support_ce_module name="support_ce2" parent="link2">
+          <origin xyz="0.05 0.000 0.01" rpy="0 0 0"/>
+        </xacro:support_ce_module>
+      </xacro:if>
+
+      <!-- support_ce3: link3 -->
+      <xacro:if value="${self == 3}">
+        <xacro:support_ce_module name="support_ce3" parent="link3">
+          <origin xyz="${link_length_3-0.05} 0.000 0.01" rpy="0 0 0"/>
+        </xacro:support_ce_module>
+      </xacro:if>
+
+      <!-- support_ce4: link4 -->
+      <xacro:if value="${self == 4}">
+        <xacro:support_ce_module name="support_ce4" parent="link4">
+          <origin xyz="${end_leg_offset} 0.000 0.01" rpy="0 0 0"/>
+        </xacro:support_ce_module>
+      </xacro:if>
+
+    </xacro:if>
+
     <!-- leg -->
     <xacro:if value="${with_leg == 1}">
       <!-- head -->
@@ -285,11 +331,36 @@
           <origin xyz="${general_leg_offset_old_version} 0.0 0" rpy="0 0 0"/>
         </xacro:standard_leg_old_version>
         </xacro:if>
-        <xacro:unless value="${old_version == 1}">
+
+        <!-- <xacro:unless value="${old_version == 1}">
           <xacro:standard_leg_joint parent = "link${self}" >
             <origin xyz="0.0 0.0 0" rpy="0 0 0"/>
           </xacro:standard_leg_joint>
-        </xacro:unless>
+        </xacro:unless> -->
+
+        <xacro:unless value="${old_version == 1}">
+        <!-- leg2: link2 に付ける -->
+        <xacro:if value="${self == 2}">
+          <xacro:standard_leg_joint parent="link2">
+            <origin xyz="0.05 0.0 0.01" rpy="0 0 0"/>
+          </xacro:standard_leg_joint>
+        </xacro:if>
+
+        <!-- leg3: link3 に付ける -->
+        <xacro:if value="${self == 3}">
+          <xacro:standard_leg_joint parent="link3">
+            <origin xyz="0.04 0.0 0.01" rpy="0 0 0"/>
+          </xacro:standard_leg_joint>
+        </xacro:if>
+
+        <!-- leg4: link4 ではなく link3 に付ける -->
+        <xacro:if value="${self == 4}">
+          <xacro:standard_leg_joint parent="link3">
+            <origin xyz="${link_length_3-0.05} 0.0 0.01" rpy="0 0 0"/>
+          </xacro:standard_leg_joint>
+        </xacro:if>
+
+      </xacro:unless>
 
         <!-- tail -->
         <xacro:if value="${self == links}">
@@ -307,14 +378,25 @@
       </xacro:unless>
     </xacro:if>
 
-
     <!-- joint -->
     <xacro:unless value="${self == links}">
       <joint name="joint${self}" type="revolute">
         <limit effort="10.0" lower="${-pi/2}" upper="${pi/2}" velocity="0.5"/>
         <parent link="link${self}"/>
         <child link="link${self+1}"/>
-        <origin rpy="0 0 0" xyz="${link_length} 0 0"/>
+        <!-- <origin rpy="0 0 0" xyz="${link_length} 0 0"/> -->
+        <xacro:if value="${self == 1}">
+        <!-- joint1: link1 -> link2 link_length = 0.6 -->
+          <origin rpy="0 0 0" xyz="${link_length} 0.000 0.000"/>
+        </xacro:if>
+        <xacro:if value="${self == 2}">
+          <!-- joint2: link2 -> link3 link_length = 0.575 -->
+          <origin rpy="0 0 0" xyz="${link_length_2} 0.000 0.000"/>
+        </xacro:if>
+        <xacro:if value="${self == 3}">
+          <!-- joint3: link3 -> link4 を調整 -->
+          <origin rpy="0 0 0" xyz="${link_length_3} 0.000 0.000"/>
+        </xacro:if>
         <axis xyz="0 0 1"/>
         <dynamics damping="0.9" friction="0.05"/>
       </joint>

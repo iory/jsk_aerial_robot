@@ -7,7 +7,9 @@
   <thrust_link name="thrust" />
 
   <!-- kinematics [m] -->
-  <xacro:property name="link_length" value=".6" />
+  <xacro:property name="link_length" value=".580" />
+  <xacro:property name="link_length_2" value=".575" />
+  <xacro:property name="link_length_3" value=".625" />
   <xacro:property name="protector_radius" value=".1925" />
 
   <xacro:property name="head_leg_offset" value="${0.3 - 0.25884}" />
@@ -26,7 +28,7 @@
   <xacro:property name="max_force" value="20.0" /> <!-- [N] -->
   <xacro:property name="min_force" value="1.0" /> <!-- [N] -->
 
-  <xacro:macro name="link_model" params="type with_leg:=${with_leg} old_version:=${old_version} tilt_mode:=${tilt_mode} tilt_angle:=${tilt_angle} prop_15inch:=${prop_15inch}">
+  <xacro:macro name="link_model" params="type with_leg:=${with_leg} old_version:=${old_version} tilt_mode:=${tilt_mode} tilt_angle:=${tilt_angle} prop_15inch:=${prop_15inch} mesh_ext:=dae support_ce:=${support_ce}">
     <!-- for fcl in planning -->
     <collision>
       <xacro:if value="${with_leg == 1}">
@@ -44,27 +46,51 @@
     </collision>
 
     <visual>
+      <!-- old version -->
       <xacro:if value="${old_version == 1}">
         <origin rpy="0 0 0" xyz="${link_length* 0.5} 0 0"/>
         <geometry>
-          <mesh filename="package://hydrus/urdf/mesh/ver1/link/${type}_link.dae"/>
+          <mesh filename="package://hydrus/urdf/mesh/ver1/link/${type}_link.${mesh_ext}"/>
         </geometry>
       </xacro:if>
+
+      <!-- new version -->
       <xacro:unless value="${old_version == 1}">
-        <origin rpy="0 0 0" xyz="${link_length* 0.5} 0 0"/>
-        <geometry>
-          <xacro:if value="${tilt_mode == 1}">
+
+        <!-- tilt model -->
+        <xacro:if value="${tilt_mode == 1}">
+          <origin rpy="0 0 0" xyz="${link_length* 0.5} 0 0"/>
+          <geometry>
             <xacro:if value="${prop_15inch == 1}">
               <mesh filename="package://hydrus/urdf/mesh/ver2/link/tilt_${tilt_angle}deg_15inch_link${type}.dae"/>
             </xacro:if>
             <xacro:unless value="${prop_15inch == 1}">
               <mesh filename="package://hydrus/urdf/mesh/ver2/link/tilt_${tilt_angle}deg_link${type}.dae"/>
             </xacro:unless>
+          </geometry>
+        </xacro:if>
+
+        <!-- non-tilt CE/ver3 model -->
+        <xacro:unless value="${tilt_mode == 1}">
+          <xacro:if value="${type == 1}">
+            <!-- <origin rpy="0 0 0" xyz="0.020 0.000 0.000"/> -->
+            <origin rpy="0 0 0" xyz="0.000 0.000 0.000"/>
           </xacro:if>
-          <xacro:unless value="${tilt_mode == 1}">
-            <mesh filename="package://hydrus/urdf/mesh/ver2/link/link${type}.dae"/>
-          </xacro:unless>
-        </geometry>
+          <xacro:if value="${type == 2}">
+            <origin rpy="0 0 0" xyz="0.000 0.000 0.000"/>
+          </xacro:if>
+          <xacro:if value="${type == 3}">
+            <origin rpy="0 0 0" xyz="0.000 0.000 0.000"/>
+          </xacro:if>
+          <xacro:if value="${type == 4}">
+            <origin rpy="0 0 0" xyz="0.000 -0.000 0.000"/>
+          </xacro:if>
+
+          <geometry>
+            <mesh filename="package://hydrus/urdf/mesh/ver3/link/link${type}.${mesh_ext}"/>
+          </geometry>
+        </xacro:unless>
+
       </xacro:unless>
     </visual>
   </xacro:macro>
@@ -138,6 +164,20 @@
     </xacro:extra_module>
   </xacro:macro>
 
+  <!-- support_ce -->
+  <xacro:macro name="support_ce_module" params="name parent *origin">
+    <xacro:extra_module name="${name}" parent="${parent}" visible="1"
+                        model_url="package://hydrus/urdf/mesh/ver3/support_ce/support_ce.${mesh_ext}">
+      <xacro:insert_block name="origin"/>
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.001"/>
+        <inertia ixx="0.000001" ixy="0.0" ixz="0.0"
+                iyy="0.000001" iyz="0.0"
+                izz="0.000001"/>
+      </inertial>
+    </xacro:extra_module>
+  </xacro:macro>
 
   <!-- friction -->
   <xacro:macro name="friction" params="self">
