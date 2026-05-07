@@ -199,8 +199,7 @@ public:
     ground_truth_ang_vel_ = ang_vel;
   }
 
-  static const uint8_t IMU_PUB_INTERVAL = 2; //10-> 100Hz, 2 -> 500Hz
-  static const uint8_t ATTITUDE_PUB_INTERVAL = 100; //100 -> 10Hz
+  static const uint8_t IMU_PUB_INTERVAL = 5; //10-> 100Hz, 2 -> 500Hz
 
 private:
   ros::NodeHandle* nh_;
