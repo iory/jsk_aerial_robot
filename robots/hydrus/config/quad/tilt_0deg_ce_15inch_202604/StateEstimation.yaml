@@ -5,8 +5,8 @@ estimation:
         - sensor_plugin/imu
         - sensor_plugin/mocap
         - sensor_plugin/vo #Fast Lio
-        - sensor_plugin/alt
-        - sensor_plugin/gps
+        # - sensor_plugin/alt
+        # - sensor_plugin/gps
 
         # egomotion estimation
         egomotion_list:
@@ -51,7 +51,3 @@ sensor_plugin:
         vo1:
                 estimate_mode: 1 # 1<<0
                 throttle_rate: 120 # Hz
-        alt:
-                estimate_mode: 0 # 1<<0
-        gps:
-                estimate_mode: 0 # 1<<0
