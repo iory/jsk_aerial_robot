@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ $# -ne 1 ];then
-    echo "Usage: rosrun gimbalrotor rosbag_record.sh file_name_prefix";
+    echo "Usage: rosrun hydrus rosbag_record.sh file_name_prefix";
     exit 1
 fi
 
