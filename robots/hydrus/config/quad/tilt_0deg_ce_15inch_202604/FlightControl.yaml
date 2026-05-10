@@ -1,5 +1,9 @@
 aerial_robot_control_name: aerial_robot_control/hydrus_ceiling_effect_lqi_controller
 
+# for ceiling effect compensation
+ceiling_height: 1.3
+rotor_radius: 0.1905
+
 controller:
   xy:
     p_gain: 1.5

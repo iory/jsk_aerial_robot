@@ -35,6 +35,7 @@ void AttitudeController::init(ros::NodeHandle* nh, StateEstimate* estimator)
   torque_allocation_matrix_inv_sub_ = nh_->subscribe("torque_allocation_matrix_inv", 1, &AttitudeController::torqueAllocationMatrixInvCallback, this);
   sim_vol_sub_ = nh_->subscribe("set_sim_voltage", 1, &AttitudeController::setSimVolCallback, this);
   offset_rot_sub_ = nh_->subscribe("desire_coordinate", 1, &AttitudeController::offsetRotCallback, this);
+  ceiling_effect_thrust_ratio_sub_ = nh_->subscribe("ceiling_effect/thrust_ratio", 1, &AttitudeController::ceilingEffectThrustRatioCallback, this);
   baseInit();
   gimbal_control_pub_ = nh_->advertise<sensor_msgs::JointState>("gimbals_ctrl", 1);
 }
@@ -52,6 +53,7 @@ AttitudeController::AttitudeController():
   p_matrix_pseudo_inverse_inertia_sub_("p_matrix_pseudo_inverse_inertia", &AttitudeController::pMatrixInertiaCallback, this),
   torque_allocation_matrix_inv_sub_("torque_allocation_matrix_inv", &AttitudeController::torqueAllocationMatrixInvCallback, this),
   offset_rot_sub_("desire_coordinate", &AttitudeController::offsetRotCallback, this ),
+  ceiling_effect_thrust_ratio_sub_("ceiling_effect/thrust_ratio", &AttitudeController::ceilingEffectThrustRatioCallback, this),
   att_control_srv_("set_attitude_control", &AttitudeController::setAttitudeControlCallback, this),
   esc_telem_pub_("esc_telem", &esc_telem_msg_)
 {
@@ -120,7 +122,7 @@ void AttitudeController::init(TIM_HandleTypeDef* htim1, TIM_HandleTypeDef* htim2
   nh_->subscribe(p_matrix_pseudo_inverse_inertia_sub_);
   nh_->subscribe(torque_allocation_matrix_inv_sub_);
   nh_->subscribe(offset_rot_sub_);
-
+  nh_->subscribe(ceiling_effect_thrust_ratio_sub_); //for ceiling effect
   nh_->advertiseService(att_control_srv_);
 
   baseInit();
@@ -146,6 +148,7 @@ void AttitudeController::baseInit()
       max_duty_[i] = IDLE_DUTY; //should assign right value from PC(ros)
       min_thrust_[i] = 0;
       force_landing_thrust_[i] = 0;
+      ceiling_effect_thrust_ratio_[i] = 1.0f; // initialize ceiling effect thrust ratio to 1.0 (no compensation)
     }
   pwm_pub_last_time_ = 0;
   pwm_test_flag_ = false;
@@ -495,6 +498,47 @@ void AttitudeController::reset(void)
 
 #ifdef SIMULATION
   prev_time_ = -1;
+#endif
+}
+
+// for ceiling effect
+void AttitudeController::ceilingEffectThrustRatioCallback(const std_msgs::Float32MultiArray& msg)
+{
+#ifndef SIMULATION
+  if(mutex_ != NULL) osMutexWait(*mutex_, osWaitForever);
+#endif
+
+#ifdef SIMULATION
+  int ratio_size = msg.data.size();
+#else
+  int ratio_size = msg.data_length;
+#endif
+
+  if(ratio_size < motor_number_)
+    {
+#ifdef SIMULATION
+      ROS_WARN("ceiling effect thrust ratio size is smaller than motor number");
+#else
+      nh_->logwarn("ceiling effect thrust ratio size is smaller than motor number");
+#endif
+#ifndef SIMULATION
+      if(mutex_ != NULL) osMutexRelease(*mutex_);
+#endif
+      return;
+    }
+
+  for(int i = 0; i < motor_number_; i++)
+    {
+      float ratio = msg.data[i];
+
+      if(std::isfinite(ratio) && ratio > 1e-6f)
+        ceiling_effect_thrust_ratio_[i] = ratio;
+      else
+        ceiling_effect_thrust_ratio_[i] = 1.0f;
+    }
+
+#ifndef SIMULATION
+  if(mutex_ != NULL) osMutexRelease(*mutex_);
 #endif
 }
 
@@ -1137,8 +1181,14 @@ void AttitudeController::pwmConversion()
             default:
               break;
             }
-
-          target_pwm_[i] = convert(target_thrust_[i], i);
+          
+          float ceiling_effect_thrust_ratio = ceiling_effect_thrust_ratio_[i];
+          if(!std::isfinite(ceiling_effect_thrust_ratio) || ceiling_effect_thrust_ratio < 1e-6f)
+          {
+            ceiling_effect_thrust_ratio = 1.0f;
+          }
+          float compensated_target_thrust = target_thrust_[i] * ceiling_effect_thrust_ratio;
+          target_pwm_[i] = convert(compensated_target_thrust, i);
 
           /* constraint */
           if(target_pwm_[i] < min_duty_[i]) target_pwm_[i]  = min_duty_[i];

@@ -130,6 +130,7 @@ private:
   ros::Subscriber torque_allocation_matrix_inv_sub_;
   ros::Subscriber sim_vol_sub_;
   ros::Subscriber offset_rot_sub_;
+  ros::Subscriber ceiling_effect_thrust_ratio_sub_; //for ceiling effect
   ros::Publisher anti_gyro_pub_;
   ros::Publisher gimbal_control_pub_;
   ros::ServiceServer att_control_srv_;
@@ -146,6 +147,7 @@ private:
   ros::Subscriber<spinal::PMatrixPseudoInverseWithInertia, AttitudeController> p_matrix_pseudo_inverse_inertia_sub_;
   ros::Subscriber<spinal::TorqueAllocationMatrixInv, AttitudeController> torque_allocation_matrix_inv_sub_;
   ros::Subscriber<spinal::DesireCoord, AttitudeController> offset_rot_sub_;
+  ros::Subscriber<std_msgs::Float32MultiArray, AttitudeController> ceiling_effect_thrust_ratio_sub_; //for ceiling effect
   ros::ServiceServer<std_srvs::SetBool::Request, std_srvs::SetBool::Response, AttitudeController> att_control_srv_;
 
   ros::Publisher esc_telem_pub_;
@@ -190,6 +192,7 @@ private:
   float roll_pitch_term_[MAX_MOTOR_NUMBER]; //[N]
   float yaw_term_[MAX_MOTOR_NUMBER]; //[N]
   float extra_yaw_pi_term_[MAX_MOTOR_NUMBER]; //[N]
+  float ceiling_effect_thrust_ratio_[MAX_MOTOR_NUMBER]; // 1/k(d,l) for ceiling effect compensation
   int max_yaw_term_index_;
 
   // Offset Rotation from the control frame to the estimation frame
@@ -228,6 +231,7 @@ private:
   void pMatrixInertiaCallback(const spinal::PMatrixPseudoInverseWithInertia& msg);
   void torqueAllocationMatrixInvCallback(const spinal::TorqueAllocationMatrixInv& msg);
   void offsetRotCallback(const spinal::DesireCoord& msg);
+  void ceilingEffectThrustRatioCallback(const std_msgs::Float32MultiArray& msg);
 
   void thrustGainMapping();
   void maxYawGainIndex();

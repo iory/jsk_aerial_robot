@@ -19,15 +19,16 @@ void HydrusCeilingEffectLQIController::initialize(ros::NodeHandle nh,
   
   nhp.param("rotor_radius", rotor_radius_, 0.1905);
   nhp.param("ceiling_height", ceiling_height_, 1.5);//ceiling_height by yourself
+  nh.param("ceiling_effect", ceiling_effect_enabled_, false);
   rotor_distance_.assign(6, 0.0);
   rotor_distance_ratio_.assign(6, 0.0);
 
   ceiling_effect_gain_.assign(motor_num_, 1.0);
 
   // ceiling effect debug publisher
-  ceiling_distance_ratio_pub_ = nh.advertise<std_msgs::Float64>("debug/ceiling_effect/ceiling_distance_ratio", 1);
-  rotor_distance_ratio_pub_ = nh.advertise<std_msgs::Float64MultiArray>("debug/ceiling_effect/rotor_distance_ratio", 1);
-  ceiling_effect_gain_pub_ = nh.advertise<std_msgs::Float64MultiArray>("debug/ceiling_effect/gain", 1);
+  ceiling_distance_ratio_pub_ = nh.advertise<std_msgs::Float64>("ceiling_effect/ceiling_distance_ratio", 1);
+  rotor_distance_ratio_pub_ = nh.advertise<std_msgs::Float64MultiArray>("ceiling_effect/rotor_distance_ratio", 1);
+  ceiling_effect_thrust_ratio_pub_ = nh.advertise<std_msgs::Float32MultiArray>("ceiling_effect/thrust_ratio", 1);
 }
 
 bool HydrusCeilingEffectLQIController::checkRobotModel()
@@ -131,12 +132,20 @@ bool HydrusCeilingEffectLQIController::updateCeilingDistance()
 
 void HydrusCeilingEffectLQIController::updateCeilingEffectGain()
 {
-  for(int i = 0; i < motor_num_; ++i)
+  if(!ceiling_effect_enabled_)
   {
-    ceiling_effect_gain_.at(i) = 1.0;
+    for(int i = 0; i < motor_num_; ++i)
+    {
+      ceiling_effect_gain_.at(i) = 1.0;
+    }
+    return;
   }
 
-  // 後でここを k(d,l) に置き換える
+  for(int i = 0; i < motor_num_; ++i)
+  {
+    // TODO: replace with k(d,l)
+    ceiling_effect_gain_.at(i) = 2.0;  // temporary test value
+  }
 }
 
 bool HydrusCeilingEffectLQIController::updateCeilingEffectParams()
@@ -156,11 +165,18 @@ bool HydrusCeilingEffectLQIController::updateCeilingEffectParams()
   rotor_distance_ratio_msg.data.push_back(l);
   rotor_distance_ratio_pub_.publish(rotor_distance_ratio_msg);
 
-  std_msgs::Float64MultiArray gain_msg;
-  gain_msg.data.clear();
+  std_msgs::Float32MultiArray ceiling_effect_thrust_ratio_msg;
+  ceiling_effect_thrust_ratio_msg.data.clear();
   for(const auto& k : ceiling_effect_gain_)
-  gain_msg.data.push_back(k);
-  ceiling_effect_gain_pub_.publish(gain_msg);
+ {
+  float ratio = 1.0f;
+  if(std::isfinite(k) && k > 1e-6)
+  {
+    ratio = static_cast<float>(1.0 / k);
+  }
+  ceiling_effect_thrust_ratio_msg.data.push_back(ratio);
+  }
+  ceiling_effect_thrust_ratio_pub_.publish(ceiling_effect_thrust_ratio_msg);
 
   return true;
 }
@@ -180,10 +196,7 @@ void HydrusCeilingEffectLQIController::sendFourAxisCommand()
   flight_command_data.angles[1] = target_pitch_;
   flight_command_data.angles[2] = candidate_yaw_term_;
 
-  std::vector<float> compensated_base_thrust = target_base_thrust_;
-  compensateBaseThrust(compensated_base_thrust);
-
-  flight_command_data.base_thrust = compensated_base_thrust;
+  flight_command_data.base_thrust = target_base_thrust_;
   flight_cmd_pub_.publish(flight_command_data);
 }
 

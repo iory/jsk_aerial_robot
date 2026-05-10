@@ -39,8 +39,8 @@ estimation:
         fuser_experiment_name3: /ex/z
 
 
-# EGOMOTION_ESTIMATION_MODE = 0
-# EXPERIMENT_MODE = 1
+# Lidar_ESTIMATION_MODE = 0 # for lidar, use this mode
+# EXPERIMENT_MODE = 1 # for mocap, use this mode
 # GROUND_TRUTH_MODE = 2
 
 sensor_plugin:

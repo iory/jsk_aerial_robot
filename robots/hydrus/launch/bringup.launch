@@ -22,13 +22,14 @@
   <arg name="config_dir" default="$(find hydrus)/config/$(arg type)" />
   <arg name="mujoco" default="False" />
   <arg name="demo" default="True" />
+  <arg name="ceiling_effect" default="False" />
 
   ###########  Parameters  ###########
   <group ns="$(arg robot_ns)">
 
     ###########  Basic Param  ###########
-    # EGOMOTION_ESTIMATE = 0
-    # EXPERIMENT_ESTIMATE = 1. for unstable mocap, use this mode
+    # Livox_ESTIMATE = 0. for lidar, use this mode
+    # EXPERIMENT_ESTIMATE = 1. for mocap, use this mode
     # GROUND_TRUTH = 2
     <param name="estimation/mode" value= "$(arg sim_estimate_mode)" if="$(arg simulation)" />
     <param name="estimation/mode" value= "$(arg estimate_mode)" if="$(arg real_machine)"/>
@@ -48,6 +49,7 @@
 
     ###########  Control  ###########
     <rosparam file="$(arg config_dir)/$(arg onboards_model)/FlightControl.yaml" command="load" />
+    <param name="ceiling_effect" value="$(arg ceiling_effect)" />
 
     ###########  Sensor Fusion  ###########
     <rosparam file="$(arg config_dir)/$(arg onboards_model)/StateEstimation.yaml" command="load" />

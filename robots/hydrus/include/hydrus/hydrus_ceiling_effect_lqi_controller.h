@@ -41,6 +41,7 @@
 #include <spinal/FourAxisCommand.h>
 #include <std_msgs/Float64.h>
 #include <std_msgs/Float64MultiArray.h>
+#include <std_msgs/Float32MultiArray.h>
 
 namespace aerial_robot_control
 {
@@ -76,6 +77,7 @@ namespace aerial_robot_control
     tf::TransformListener tf_listener_;
 
     //ceiling effect related parameters
+    bool ceiling_effect_enabled_;
     double rotor_radius_;
     double ceiling_height_;
     double ceiling_distance_;
@@ -85,6 +87,6 @@ namespace aerial_robot_control
     std::vector<double> ceiling_effect_gain_;
     ros::Publisher ceiling_distance_ratio_pub_;
     ros::Publisher rotor_distance_ratio_pub_;
-    ros::Publisher ceiling_effect_gain_pub_;
+    ros::Publisher ceiling_effect_thrust_ratio_pub_;
   };
 };
