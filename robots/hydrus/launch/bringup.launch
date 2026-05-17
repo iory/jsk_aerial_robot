@@ -22,8 +22,9 @@
   <arg name="config_dir" default="$(find hydrus)/config/$(arg type)" />
   <arg name="mujoco" default="False" />
   <arg name="demo" default="True" />
-  <arg name="ceiling_effect" default="False" />
-
+  <!-- 0: no ceiling effect, 1: single rotor, 2: multiple rotors -->
+  <arg name="ceiling_effect_mode" default="0" />
+  
   ###########  Parameters  ###########
   <group ns="$(arg robot_ns)">
 
@@ -49,7 +50,8 @@
 
     ###########  Control  ###########
     <rosparam file="$(arg config_dir)/$(arg onboards_model)/FlightControl.yaml" command="load" />
-    <param name="ceiling_effect" value="$(arg ceiling_effect)" />
+    <param name="ceiling_effect_table_path" value="$(arg config_dir)/$(arg onboards_model)/model3_ct_normalized_results.csv" />
+    <param name="ceiling_effect_mode" value="$(arg ceiling_effect_mode)" />
 
     ###########  Sensor Fusion  ###########
     <rosparam file="$(arg config_dir)/$(arg onboards_model)/StateEstimation.yaml" command="load" />

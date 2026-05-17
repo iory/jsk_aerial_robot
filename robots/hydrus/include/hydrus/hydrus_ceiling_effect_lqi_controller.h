@@ -42,6 +42,10 @@
 #include <std_msgs/Float64.h>
 #include <std_msgs/Float64MultiArray.h>
 #include <std_msgs/Float32MultiArray.h>
+#include <vector>
+#include <map>
+#include <string>
+#include <utility>
 
 namespace aerial_robot_control
 {
@@ -73,18 +77,38 @@ namespace aerial_robot_control
     void updateCeilingEffectGain();
     void compensateBaseThrust(std::vector<float>& compensated_base_thrust);
     
+    //CT ratio table related functions
+    bool loadCTRatioTable(const std::string& csv_path);
+    double lookupCTRatio(double l_bar, double d_R) const;
+    double getCTRatioFromTable(double l_bar, double d_R) const;
+    static int ratioKey(double value);
+
     //get tf
     tf::TransformListener tf_listener_;
 
-    //ceiling effect related parameters
-    bool ceiling_effect_enabled_;
+    // ceiling effect related parameters
+    bool ceiling_effect_enabled_;  // old bool parameter, kept for compatibility
+    int ceiling_effect_mode_;      // 0: none, 1: single-rotor, 2: multi-rotor
+    std::string ceiling_effect_table_path_;
+
     double rotor_radius_;
     double ceiling_height_;
     double ceiling_distance_;
     double ceiling_distance_ratio_;
+
     std::vector<double> rotor_distance_;
     std::vector<double> rotor_distance_ratio_;
+
+    // Stores CT_ratio = k(d_R, l_bar).
+    // updateCeilingEffectParams() publishes 1.0 / k to spinal.
     std::vector<double> ceiling_effect_gain_;
+
+    // CT_ratio table
+    // key: round(value * 100), e.g., 0.30 -> 30, 10.0 -> 1000
+    std::vector<double> ct_l_grid_;
+    std::vector<double> ct_d_grid_;
+    std::map<std::pair<int, int>, double> ct_ratio_table_;
+
     ros::Publisher ceiling_distance_ratio_pub_;
     ros::Publisher rotor_distance_ratio_pub_;
     ros::Publisher ceiling_effect_thrust_ratio_pub_;
