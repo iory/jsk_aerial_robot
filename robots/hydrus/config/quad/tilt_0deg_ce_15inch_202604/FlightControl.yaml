@@ -3,6 +3,7 @@ aerial_robot_control_name: aerial_robot_control/hydrus_ceiling_effect_lqi_contro
 # for ceiling effect compensation
 ceiling_effect_mode: 2
 ceiling_height: 2.73
+ceiling_distance_offset: 0.05
 rotor_radius: 0.1905
 
 controller:

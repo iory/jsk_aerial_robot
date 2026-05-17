@@ -94,6 +94,7 @@ namespace aerial_robot_control
     double rotor_radius_;
     double ceiling_height_;
     double ceiling_distance_;
+    double ceiling_distance_offset_;
     double ceiling_distance_ratio_;
 
     std::vector<double> rotor_distance_;

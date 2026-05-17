@@ -50,6 +50,7 @@ void HydrusCeilingEffectLQIController::initialize(ros::NodeHandle nh,
   
   nh.param("rotor_radius", rotor_radius_, 0.1905);
   nh.param("ceiling_height", ceiling_height_, 1.5);//ceiling_height by yourself
+  nh.param("ceiling_distance_offset", ceiling_distance_offset_, 0.05);
   // 0: no compensation
   // 1: single-rotor mode, use l_bar = 10.0
   // 2: multi-rotor mode, use l12_bar and l34_bar
@@ -178,8 +179,7 @@ bool HydrusCeilingEffectLQIController::updateCeilingDistance()
     double root_z = transform.getOrigin().z();
 
     // ceiling distance from rotor disk/reference point.
-  // 0.05 [m] is an empirical offset from hydrus/root to the actual ceiling reference.
-    ceiling_distance_ = ceiling_height_ - root_z - 0.05; 
+    ceiling_distance_ = ceiling_height_ - root_z - ceiling_distance_offset_;
     ceiling_distance_ratio_ = ceiling_distance_ / rotor_radius_;
 
     return true;
