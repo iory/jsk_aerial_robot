@@ -113,17 +113,16 @@
   <!-- end: gps -->
 
   <!-- 2.3 livox module-->
-  <!--2.3-1 livox-->
-  <xacro:extra_module name = "lidar_imu" parent = "support_livox" visible = "1"
-                      model_url = "package://hydrus/urdf/mesh/ver3/sensor/livox.${mesh_ext}">
-    <origin xyz="0.0 0.0 0.047" rpy="0 0 ${-pi/2}"/>
+  <!--2.3-1 support ce spinal-->
+  <xacro:extra_module name = "support_ce_spinal" parent = "support_livox" visible = "1"
+                      model_url = "package://hydrus/urdf/mesh/ver3/support_ce/support_ce.${mesh_ext}">
+    <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
     <inertial>
-      <origin xyz="-0.00020 -0.00001 -0.02497" rpy="0 0 0"/>
-      <mass value="0.265"/>
-      <inertia
-          ixx="0.00012374565" ixy="0.00000001126" ixz="0.00000002000"
-          iyy="0.00013334853" iyz="0.00000003311"
-          izz="0.00013227450"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.001"/>
+      <inertia ixx="0.000001" ixy="0.0" ixz="0.0"
+              iyy="0.000001" iyz="0.0"
+              izz="0.000001"/>
     </inertial>
   </xacro:extra_module>
 
