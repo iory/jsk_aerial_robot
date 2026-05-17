@@ -173,13 +173,13 @@ bool HydrusCeilingEffectLQIController::updateCeilingDistance()
   tf::StampedTransform transform;
   try
   {
-    tf_listener_.lookupTransform("world", "hydrus/thrust1", ros::Time(0), transform);
+    tf_listener_.lookupTransform("world", "hydrus/root", ros::Time(0), transform);
 
-    double thrust1_z = transform.getOrigin().z();
+    double root_z = transform.getOrigin().z();
 
     // ceiling distance from rotor disk/reference point.
-    // 0.04 [m] is the offset from thrust1 frame to the actual rotor/ceiling reference.
-    ceiling_distance_ = ceiling_height_ - thrust1_z - 0.04;
+  // 0.05 [m] is an empirical offset from hydrus/root to the actual ceiling reference.
+    ceiling_distance_ = ceiling_height_ - root_z - 0.05; 
     ceiling_distance_ratio_ = ceiling_distance_ / rotor_radius_;
 
     return true;
