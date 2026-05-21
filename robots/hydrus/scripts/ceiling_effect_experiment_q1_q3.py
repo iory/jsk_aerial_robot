@@ -47,7 +47,7 @@ class CeilingEffectExperimentNode(object):
 
         # q1, q3 の最終目標
         self.q1_goal = rospy.get_param("~q1_goal", 0.80)
-        self.q3_goal = rospy.get_param("~q3_goal", 0.50)
+        self.q3_goal = rospy.get_param("~q3_goal", 0.60)
 
         # 各関節をゆっくり整えるときの速度 [rad/s]
         self.q2_speed = rospy.get_param("~q2_speed", 0.03)

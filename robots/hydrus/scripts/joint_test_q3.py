@@ -23,7 +23,7 @@ class JointMotionOnlyExperimentNode(object):
         self.q3_start_param = rospy.get_param("~q3_start", 1.40)
 
         # q3 の最終目標
-        self.q3_goal = rospy.get_param("~q3_goal", 0.50)
+        self.q3_goal = rospy.get_param("~q3_goal", 0.60)
 
         # 各関節をゆっくり整えるときの速度 [rad/s]
         self.joint_set_speed = rospy.get_param("~joint_set_speed", 0.03)
