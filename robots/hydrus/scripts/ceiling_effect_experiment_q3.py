@@ -17,7 +17,7 @@ class CeilingEffectExperimentNode(object):
         self.robot_ns = self.robot_ns.rstrip("/")
 
         # ===== 高度制御パラメータ =====
-        self.target_d_R = rospy.get_param(self.robot_ns + "/target_d_R")
+        self.target_d_R = rospy.get_param("~target_d_R", rospy.get_param(self.robot_ns + "/target_d_R", 8.0))
         self.ceiling_height = rospy.get_param(self.robot_ns + "/ceiling_height")
         self.ceiling_distance_offset = rospy.get_param(self.robot_ns + "/ceiling_distance_offset")
         self.rotor_radius = rospy.get_param(self.robot_ns + "/rotor_radius")
