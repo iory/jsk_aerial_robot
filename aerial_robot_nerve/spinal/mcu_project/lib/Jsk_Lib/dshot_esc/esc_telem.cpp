@@ -16,7 +16,7 @@ void ESCReader::init(UART_HandleTypeDef* huart)
   memset(esc_telem_rx_buf_, 0, ESC_BUFFER_SIZE);
 }
 
-void ESCReader::update(spinal::ESCTelemetry& esc_msg)
+bool ESCReader::update(spinal::ESCTelemetry& esc_msg)
 {
   // Byte 0: Temperature
   // Byte 1: Voltage high byte
@@ -35,6 +35,7 @@ void ESCReader::update(spinal::ESCTelemetry& esc_msg)
     __HAL_UART_CLEAR_FLAG(huart_, UART_CLEAR_NEF | UART_CLEAR_OREF | UART_FLAG_RXNE | UART_FLAG_ORE);
     HAL_UART_Receive_DMA(huart_, esc_telem_rx_buf_, ESC_BUFFER_SIZE);
     esc_telem_rd_ptr_ = 0;
+    return false;
   }
 
   // Calculate available bytes in circular buffer
@@ -50,12 +51,9 @@ void ESCReader::update(spinal::ESCTelemetry& esc_msg)
   }
 
   // Need at least 10 bytes for a complete frame
-  if (available_bytes < 10) return;
+  if (available_bytes < 10) return false;
 
   uint8_t buffer[10];  // buffer for KISS esc telemetry data
-
-  // Save current read pointer for potential rollback
-  uint32_t saved_rd_ptr = esc_telem_rd_ptr_;
 
   // Read 10 bytes from circular buffer
   for (int i = 0; i < 10; i++)
@@ -76,12 +74,15 @@ void ESCReader::update(spinal::ESCTelemetry& esc_msg)
     uint16_t erpm = (static_cast<uint16_t>(buffer[7]) << 8) | buffer[8];
     esc_msg.rpm = erpm * 100 / (num_motor_mag_pole_ / 2);
     esc_msg.crc_error = 0;
+    esc_telem_rd_ptr_ = dma_write_ptr;  // discard any extra frames to prevent misattribution
+    return true;
   }
   else
   {
-    /* CRC error - rollback 9 bytes to attempt resync on next call */
-    esc_telem_rd_ptr_ = (saved_rd_ptr + 1) % ESC_BUFFER_SIZE;
+    /* CRC error - flush remaining buffer to force resync from a fresh frame */
+    esc_telem_rd_ptr_ = dma_write_ptr;
     esc_msg.crc_error = crc - buffer[9];
+    return false;
   }
 }
 
