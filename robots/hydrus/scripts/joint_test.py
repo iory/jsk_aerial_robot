@@ -64,8 +64,10 @@ class JointOnlyTestNode(object):
         msg.header.stamp = rospy.Time.now()
         msg.name = ["joint1", "joint2", "joint3"]
         msg.position = [q1, q2, q3]
-        msg.velocity = [0.0, 0.0, 0.0]
-        msg.effort = [0.0, 0.0, 0.0]
+        
+        # velocity と effort を空にする（要素を持たせない）
+        msg.velocity = []
+        msg.effort = []
 
         self.joint_pub.publish(msg)
 
