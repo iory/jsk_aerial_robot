@@ -26,7 +26,7 @@ class CeilingEffectExperimentNode(object):
             - self.target_d
         )
 
-        self.z_threshold = rospy.get_param("~z_threshold", 0.03)
+        self.z_threshold = rospy.get_param("~z_threshold", 0.10)
         self.vz_threshold = rospy.get_param("~vz_threshold", 0.03)
         self.stable_time = rospy.get_param("~stable_time", 3.0)
 
@@ -159,8 +159,10 @@ class CeilingEffectExperimentNode(object):
 
         msg.name = ["joint1", "joint2", "joint3"]
         msg.position = [q1, q2, q3]
-        msg.velocity = [0.0, 0.0, 0.0]
-        msg.effort = [0.0, 0.0, 0.0]
+        
+        # velocity と effort を空にして，位置（position）指令のみを有効化する
+        msg.velocity = []
+        msg.effort = []
 
         self.joint_pub.publish(msg)
 
@@ -219,7 +221,7 @@ class CeilingEffectExperimentNode(object):
                 self.change_state("GO_TARGET_ALTITUDE")
 
         elif self.state == "GO_TARGET_ALTITUDE":
-            # 2. q2 が目標値になったあと，姿勢を固定したまま目標高度へ移動
+            # 2. q2 が目標値になった actor，姿勢を固定したまま目標高度へ移動
             self.publish_joint_command(
                 self.q1_start,
                 self.q2_const,
