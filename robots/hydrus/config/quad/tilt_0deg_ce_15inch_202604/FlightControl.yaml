@@ -6,6 +6,9 @@ ceiling_height: 2.73
 ceiling_distance_offset: 0.05
 rotor_radius: 0.1905
 
+# for ceiling effect experiment
+target_d_R: 8.0
+
 controller:
   xy:
     p_gain: 1.5

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 from __future__ import print_function
 
 import rospy
@@ -15,30 +14,43 @@ class CeilingEffectExperimentNode(object):
         self.robot_ns = rospy.get_param("~robot_ns", "/hydrus")
 
         # ===== 高度制御パラメータ =====
-        self.target_z = rospy.get_param("~target_z", 1.0)
+        self.target_d_R = rospy.get_param(self.robot_ns + "/target_d_R")
+        self.ceiling_height = rospy.get_param(self.robot_ns + "/ceiling_height")
+        self.ceiling_distance_offset = rospy.get_param(self.robot_ns + "/ceiling_distance_offset")
+        self.rotor_radius = rospy.get_param(self.robot_ns + "/rotor_radius")
+
+        self.target_d = self.target_d_R * self.rotor_radius
+        self.target_z = (
+            self.ceiling_height
+            - self.ceiling_distance_offset
+            - self.target_d
+        )
+
         self.z_threshold = rospy.get_param("~z_threshold", 0.03)
         self.vz_threshold = rospy.get_param("~vz_threshold", 0.03)
         self.stable_time = rospy.get_param("~stable_time", 3.0)
 
+        # 目標高度へ移動するときに使う速度制御
         self.kp_z = rospy.get_param("~kp_z", 0.10)
         self.max_vz = rospy.get_param("~max_vz", 0.05)
 
         # ===== 関節角度パラメータ =====
-        # joint2 は固定
-        self.q2_const = rospy.get_param("~q2_const", 0.6) # l>1.0
+        # q2 は最初に q2_start から q2_const へゆっくり移動
+        self.q2_start = rospy.get_param("~q2_start", 1.57)
+        self.q2_const = rospy.get_param("~q2_const", 0.6)
 
-        # joint1, joint3 の開始・終了角度
+        # q1, q3 は q2 固定後，高度到達後に変化
         self.q1_start = rospy.get_param("~q1_start", 1.57)
-        self.q1_goal  = rospy.get_param("~q1_goal", 1.20)
+        self.q1_goal = rospy.get_param("~q1_goal", 1.20)
 
         self.q3_start = rospy.get_param("~q3_start", 1.57)
-        self.q3_goal  = rospy.get_param("~q3_goal", 0.50)
+        self.q3_goal = rospy.get_param("~q3_goal", 0.50)
 
-        # かなり遅く動かす
+        # q2 を目標値まで動かす時間
+        self.joint2_set_time = rospy.get_param("~joint2_set_time", 5.0)
+
+        # q1, q3 を動かす時間
         self.motion_duration = rospy.get_param("~motion_duration", 60.0)
-
-        # joint2 を先に固定する時間
-        self.joint2_set_time = rospy.get_param("~joint2_set_time", 3.0)
 
         self.current_z = None
         self.current_vz = None
@@ -70,7 +82,16 @@ class CeilingEffectExperimentNode(object):
         self.timer = rospy.Timer(rospy.Duration(0.02), self.update)
 
         rospy.loginfo("ceiling_effect_experiment_node started")
-        rospy.loginfo("target_z = %.3f", self.target_z)
+        rospy.loginfo("target_d_R = %.3f", self.target_d_R)
+        rospy.loginfo("rotor_radius = %.4f [m]", self.rotor_radius)
+        rospy.loginfo("target_d = %.4f [m]", self.target_d)
+        rospy.loginfo("ceiling_height = %.3f [m]", self.ceiling_height)
+        rospy.loginfo("ceiling_distance_offset = %.3f [m]", self.ceiling_distance_offset)
+        rospy.loginfo("calculated target_z = %.4f [m]", self.target_z)
+        rospy.loginfo("q2_start = %.3f", self.q2_start)
+        rospy.loginfo("q2_const = %.3f", self.q2_const)
+        rospy.loginfo("joint2_set_time = %.3f [s]", self.joint2_set_time)
+        rospy.loginfo("motion_duration = %.3f [s]", self.motion_duration)
 
     def odom_callback(self, msg):
         self.current_z = msg.pose.pose.position.z
@@ -84,7 +105,22 @@ class CeilingEffectExperimentNode(object):
     def clamp(self, x, min_value, max_value):
         return max(min(x, max_value), min_value)
 
+    def smooth_step(self, t, T):
+        if T <= 0.0:
+            return 1.0
+
+        s = t / T
+        s = self.clamp(s, 0.0, 1.0)
+
+        # smooth step
+        # s=0,1 で速度が0に近くなる
+        return 3.0 * s * s - 2.0 * s * s * s
+
     def publish_z_velocity_command(self):
+        """
+        目標高度へ移動するための速度指令。
+        GO_TARGET_ALTITUDE で使用する。
+        """
         if self.current_z is None:
             return
 
@@ -93,6 +129,7 @@ class CeilingEffectExperimentNode(object):
         vz_cmd = self.clamp(vz_cmd, -self.max_vz, self.max_vz)
 
         nav_msg = FlightNav()
+        nav_msg.header.stamp = rospy.Time.now()
         nav_msg.control_frame = FlightNav.WORLD_FRAME
         nav_msg.target = FlightNav.COG
 
@@ -101,13 +138,18 @@ class CeilingEffectExperimentNode(object):
 
         self.nav_pub.publish(nav_msg)
 
-    def publish_zero_z_velocity_command(self):
+    def publish_z_position_command(self, target_z):
+        """
+        指定した高度を維持するための位置指令。
+        SET_JOINT2, SLOW_JOINT_MOTION, HOLD で使用する。
+        """
         nav_msg = FlightNav()
+        nav_msg.header.stamp = rospy.Time.now()
         nav_msg.control_frame = FlightNav.WORLD_FRAME
         nav_msg.target = FlightNav.COG
 
-        nav_msg.pos_z_nav_mode = FlightNav.VEL_MODE
-        nav_msg.target_vel_z = 0.0
+        nav_msg.pos_z_nav_mode = FlightNav.POS_MODE
+        nav_msg.target_pos_z = target_z
 
         self.nav_pub.publish(nav_msg)
 
@@ -131,15 +173,23 @@ class CeilingEffectExperimentNode(object):
 
         return z_error < self.z_threshold and vz_abs < self.vz_threshold
 
+    def joint2_trajectory(self, t):
+        """
+        q1, q3 は開始角度で固定し，q2 だけをゆっくり q2_const へ動かす。
+        """
+        s = self.smooth_step(t, self.joint2_set_time)
+
+        q1 = self.q1_start
+        q2 = self.q2_start + s * (self.q2_const - self.q2_start)
+        q3 = self.q3_start
+
+        return q1, q2, q3
+
     def slow_joint_trajectory(self, t):
-        T = self.motion_duration
-
-        s = t / T
-        s = self.clamp(s, 0.0, 1.0)
-
-        # smooth step
-        # 最初と最後の速度を0に近づける
-        s = 3.0 * s * s - 2.0 * s * s * s
+        """
+        q2 は固定し，q1, q3 だけをゆっくり変化させる。
+        """
+        s = self.smooth_step(t, self.motion_duration)
 
         q1 = self.q1_start + s * (self.q1_goal - self.q1_start)
         q2 = self.q2_const
@@ -157,21 +207,19 @@ class CeilingEffectExperimentNode(object):
                 self.change_state("SET_JOINT2")
 
         elif self.state == "SET_JOINT2":
-            # joint1, joint3 は開始角度，joint2 は固定角度にする
-            self.publish_joint_command(
-                self.q1_start,
-                self.q2_const,
-                self.q3_start
-            )
+            # 1. q2 だけを先にゆっくり目標値へ移動
+            q1, q2, q3 = self.joint2_trajectory(elapsed)
+            self.publish_joint_command(q1, q2, q3)
 
-            # 高度も同時にゆっくり目標へ近づける
-            self.publish_z_velocity_command()
+            # この段階では目標高度へ移動せず，現在高度を維持
+            if self.current_z is not None:
+                self.publish_z_position_command(self.current_z)
 
             if elapsed > self.joint2_set_time:
                 self.change_state("GO_TARGET_ALTITUDE")
 
         elif self.state == "GO_TARGET_ALTITUDE":
-            # 目標高度へ移動
+            # 2. q2 が目標値になったあと，姿勢を固定したまま目標高度へ移動
             self.publish_joint_command(
                 self.q1_start,
                 self.q2_const,
@@ -193,8 +241,8 @@ class CeilingEffectExperimentNode(object):
                 self.stable_start_time = None
 
         elif self.state == "SLOW_JOINT_MOTION":
-            # 高度維持しながら joint1, joint3 を非常にゆっくり動かす
-            self.publish_z_velocity_command()
+            # 3. 目標高度を維持しながら q1, q3 だけをゆっくり変化
+            self.publish_z_position_command(self.target_z)
 
             t = (now - self.motion_start_time).to_sec()
             q1, q2, q3 = self.slow_joint_trajectory(t)
@@ -204,8 +252,8 @@ class CeilingEffectExperimentNode(object):
                 self.change_state("HOLD")
 
         elif self.state == "HOLD":
-            # 最終姿勢を維持しつつ，高度維持
-            self.publish_z_velocity_command()
+            # 4. 最終姿勢と目標高度を維持
+            self.publish_z_position_command(self.target_z)
 
             self.publish_joint_command(
                 self.q1_goal,
