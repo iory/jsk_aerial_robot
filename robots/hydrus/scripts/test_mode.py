@@ -31,8 +31,8 @@ class CeilingEffectRunNode(object):
 
         # 高度安定判定
         self.z_threshold = rospy.get_param("~z_threshold", 0.10)
-        self.vz_threshold = rospy.get_param("~vz_threshold", 0.03)
-        self.stable_time = rospy.get_param("~stable_time", 3.0)
+        self.vz_threshold = rospy.get_param("~vz_threshold", 0.08)
+        self.stable_time = rospy.get_param("~stable_time", 1.5)
 
         # 目標高度へ移動するときの速度制御
         self.kp_z = rospy.get_param("~kp_z", 0.10)
