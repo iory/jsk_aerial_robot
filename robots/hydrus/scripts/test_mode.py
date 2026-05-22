@@ -2,6 +2,7 @@
 from __future__ import print_function
 
 import rospy
+import tf
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import JointState
 from aerial_robot_msgs.msg import FlightNav
@@ -54,6 +55,7 @@ class CeilingEffectRunNode(object):
         # ===== 現在値 =====
         self.current_z = None
         self.current_vz = None
+        self.current_root_z = None 
 
         self.current_q1 = None
         self.current_q2 = None
@@ -71,6 +73,7 @@ class CeilingEffectRunNode(object):
         self.state_start_time = rospy.Time.now()
         self.stable_start_time = None
         self.motion_start_time = None
+        self.tf_listener = tf.TransformListener()
 
         # ===== Subscriber =====
         self.joint_state_sub = rospy.Subscriber(
@@ -123,6 +126,23 @@ class CeilingEffectRunNode(object):
     def odom_callback(self, msg):
         self.current_z = msg.pose.pose.position.z
         self.current_vz = msg.twist.twist.linear.z
+
+    def update_root_z_from_tf(self):
+        try:
+            trans, rot = self.tf_listener.lookupTransform(
+                "world",
+                self.robot_ns.lstrip("/") + "/root",
+                rospy.Time(0)
+            )
+            self.current_root_z = trans[2]
+            return True
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            rospy.logwarn_throttle(
+                2.0,
+                "Waiting for TF: world -> %s/root",
+                self.robot_ns.lstrip("/")
+            )
+            return False
 
     def change_state(self, next_state):
         rospy.loginfo("state: %s -> %s", self.state, next_state)
@@ -190,10 +210,10 @@ class CeilingEffectRunNode(object):
         return q1, q2, q3
 
     def publish_z_velocity_command(self):
-        if self.current_z is None:
+        if self.current_root_z is None:
             return
 
-        error_z = self.target_z - self.current_z
+        error_z = self.target_z - self.current_root_z
         vz_cmd = self.kp_z * error_z
         vz_cmd = self.clamp(vz_cmd, -self.max_vz, self.max_vz)
 
@@ -208,12 +228,12 @@ class CeilingEffectRunNode(object):
 
         rospy.loginfo_throttle(
             1.0,
-            "[GO_TARGET_ALTITUDE] z=%.3f, target_z=%.3f, vz_cmd=%.3f",
-            self.current_z,
+            "[GO_TARGET_ALTITUDE] root_z=%.3f, target_root_z=%.3f, vz_cmd=%.3f",
+            self.current_root_z,
             self.target_z,
             vz_cmd
         )
-
+        
     def publish_z_position_command(self, target_z):
         nav_msg = FlightNav()
         nav_msg.header.stamp = rospy.Time.now()
@@ -273,6 +293,7 @@ class CeilingEffectRunNode(object):
 
     def update(self, event):
         now = rospy.Time.now()
+        self.update_root_z_from_tf()
 
         if self.state == "WAIT_JOINT_STATE_AND_ODOM":
             if (
@@ -280,15 +301,17 @@ class CeilingEffectRunNode(object):
                 self.current_q2 is not None and
                 self.current_q3 is not None and
                 self.current_z is not None and
-                self.current_vz is not None
+                self.current_vz is not None and
+                self.current_root_z is not None
             ):
                 rospy.loginfo(
-                    "current state received: q1=%.3f, q2=%.3f, q3=%.3f, z=%.3f, vz=%.3f",
+                    "current state received: q1=%.3f, q2=%.3f, q3=%.3f, z=%.3f, vz=%.3f, root_z=%.3f",
                     self.current_q1,
                     self.current_q2,
                     self.current_q3,
                     self.current_z,
-                    self.current_vz
+                    self.current_vz,
+                    self.current_root_z
                 )
 
                 self.setup_start_joint_motion()
@@ -296,12 +319,13 @@ class CeilingEffectRunNode(object):
             else:
                 rospy.loginfo_throttle(
                     2.0,
-                    "waiting for joint_states and odom: q1=%s, q2=%s, q3=%s, z=%s, vz=%s",
+                    "waiting for joint_states and odom: q1=%s, q2=%s, q3=%s, z=%s, vz=%s, root_z=%s",
                     str(self.current_q1),
                     str(self.current_q2),
                     str(self.current_q3),
                     str(self.current_z),
-                    str(self.current_vz)
+                    str(self.current_vz),
+                    str(self.current_root_z)
                 )
 
         elif self.state == "SET_START_JOINTS":
