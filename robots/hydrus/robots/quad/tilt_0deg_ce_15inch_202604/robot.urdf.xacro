@@ -115,7 +115,7 @@
   <!-- 2.3 livox module-->
   <!--2.3-1 support ce spinal-->
   <xacro:extra_module name = "support_ce_spinal" parent = "support_livox" visible = "1"
-                      model_url = "package://hydrus/urdf/mesh/ver3/support_ce/support_ce.${mesh_ext}">
+                      model_url = "package://hydrus/urdf/mesh/ver3/support_ce/support_ce_10R5.${mesh_ext}">
     <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
