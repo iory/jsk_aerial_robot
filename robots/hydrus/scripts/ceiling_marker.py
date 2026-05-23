@@ -18,6 +18,10 @@ class CeilingEffectVideoOverlay:
 
         self.pwms = [None, None, None, None]
 
+        # 今回は COG 基準
+        # z_actual = z_cog
+        # z_target = target_pos_z sent to FlightNav.COG
+        # z_error  = z_target - z_actual
         self.z_actual = None
         self.z_target = None
 
@@ -58,8 +62,13 @@ class CeilingEffectVideoOverlay:
             self.pwm_cb
         )
 
+        # 変更点:
+        # 以前は /hydrus/uav/baselink/odom を読んでいたが、
+        # child_frame_id が hydrus/fc なので z_cog ではない。
+        # 今回の e_cog = z_target_cog - z_cog を見るため、
+        # /hydrus/uav/cog/odom を読む。
         rospy.Subscriber(
-            "/hydrus/uav/baselink/odom",
+            "/hydrus/uav/cog/odom",
             Odometry,
             self.odom_cb
         )
@@ -118,6 +127,8 @@ class CeilingEffectVideoOverlay:
         rospy.loginfo("ce_video_overlay started")
         rospy.loginfo("ceiling marker frame_id = %s", self.frame_id)
         rospy.loginfo("ceiling_height = %.3f", self.ceiling_height)
+        rospy.loginfo("z_actual source = /hydrus/uav/cog/odom")
+        rospy.loginfo("z_error definition = z_target - z_cog")
 
     def d_cb(self, msg):
         self.d_R = msg.data
@@ -135,11 +146,15 @@ class CeilingEffectVideoOverlay:
             self.pwms[i] = msg.motor_value[i]
 
     def odom_cb(self, msg):
+        # /hydrus/uav/cog/odom の z
+        # つまり z_cog
         self.z_actual = msg.pose.pose.position.z
 
     def nav_cb(self, msg):
-        # POS_MODE のときは target_pos_z が入る
-        self.z_target = msg.target_pos_z
+        # POS_MODE のときだけ target_pos_z を使う。
+        # VEL_MODE のときは target_pos_z は意味を持たない可能性があるため無視。
+        if msg.pos_z_nav_mode == FlightNav.POS_MODE:
+            self.z_target = msg.target_pos_z
 
     def publish_float(self, pub, value):
         if value is not None:
@@ -210,12 +225,13 @@ class CeilingEffectVideoOverlay:
 
         z_error = None
         if self.z_actual is not None and self.z_target is not None:
-            z_error = self.z_actual - self.z_target
+            # e_cog = z_target_cog - z_cog
+            z_error = self.z_target - self.z_actual
             self.publish_float(self.pub_z_error, z_error)
 
         # ===== OverlayText =====
         text = OverlayText()
-        text.width = 520
+        text.width = 560
         text.height = 430
         text.left = 20
         text.top = 20
@@ -274,6 +290,7 @@ class CeilingEffectVideoOverlay:
             f"z actual   : {z_actual_str} m\n"
             f"z target   : {z_target_str} m\n"
             f"z error    : {z_error_str} m\n"
+            f"error def. : target - cog\n"
             "\n"
             f"PWM        : {pwm_strs[0]}, {pwm_strs[1]}, {pwm_strs[2]}, {pwm_strs[3]}"
         )
