@@ -8,6 +8,7 @@ import numpy as np
 
 import skrobot
 from skrobot.coordinates import Coordinates
+from skrobot.coordinates.math import matrix2rpy
 from skrobot.model import Link
 from skrobot.model.joint import FloatingJoint
 from skrobot.models.urdf import RobotModelFromURDF
@@ -22,6 +23,16 @@ from sensor_msgs.msg import JointState
 from geometry_msgs.msg import Vector3Stamped
 
 URDF_PATH = "/home/tokunaga/ros/jsk_aerial_robot_ws/src/jsk_aerial_robot/robots/hydrus/robots/quad/tilt_0deg_ce_15inch_202604/robot.urdf"
+
+# root位置固定・yaw自由(回ってよい)の方針:
+#   yawは「固定」しようとせず, 機体を目標方向へ aim する自由度として使う.
+#   target への方位 phi から, 機体(root) yaw = phi - alpha0 を求める
+#   (alpha0 = 中心姿勢で root から見た leg5 の body 方位). こうすると腕は
+#   わずかな伸縮だけで leg5 を円に乗せられ, 関節飽和を避けられる.
+def aim_yaw_for_target(fixed_root_xyz, alpha0, target_xyz):
+    phi = np.arctan2(target_xyz[1] - fixed_root_xyz[1],
+                     target_xyz[0] - fixed_root_xyz[0])
+    return phi - alpha0
 
 # xyz,royをROSのtfから取得
 def get_xyz_rpy(listener, parent_frame, child_frame):
@@ -242,8 +253,14 @@ def main():
     # ------------------------------------------------------------------
     # URDF 読み込み
     # ------------------------------------------------------------------
-    print('Loading URDF:', URDF_PATH)
-    robot = RobotModelFromURDF(urdf_file=URDF_PATH)
+    # bringup が出す /hydrus/robot_description を優先 (無ければ URDF_PATH)
+    if rospy.has_param('/hydrus/robot_description'):
+        print('Loading URDF from param: /hydrus/robot_description')
+        robot = RobotModelFromURDF.from_robot_description(
+            '/hydrus/robot_description')
+    else:
+        print('Loading URDF:', URDF_PATH)
+        robot = RobotModelFromURDF(urdf_file=URDF_PATH)
     print('  root_link =', robot.root_link.name)
     print('  joints    =', [j.name for j in robot.joint_list])  
     
@@ -309,6 +326,15 @@ def main():
         [l.joint.name for l in link_list]))
     print(f'reference: circle r={args.radius} m around {p0}')
 
+    # alpha0 = 中心姿勢で root から見た leg5 の body 方位 (aim の基準).
+    robot.joint1.joint_angle(args.q1_center)
+    robot.joint2.joint_angle(args.fix_angle)
+    robot.joint3.joint_angle(args.q3_center)
+    fjoint.joint_angle(np.r_[fixed_root_xyz, 0.0, 0.0, 0.0])
+    _l5 = leg5.worldpos()[:2] - fixed_root_xyz[:2]
+    alpha0 = float(np.arctan2(_l5[1], _l5[0]))
+    print('alpha0 (arm bearing) = {:.3f} rad'.format(alpha0))
+
     # ------------------------------------------------------------------
     # Viewer セットアップ (PyrenderViewer)
     # ------------------------------------------------------------------
@@ -373,43 +399,27 @@ def main():
 
 
     def step_once(k, center_xyz):
-        # rosから現在のjoint角度取得
-        q_actual = joint_reader.get_actual_q()
-        
-        # 現在のjoint角度をrobotに反映
-        robot.joint1.joint_angle(q_actual[0])
-        robot.joint2.joint_angle(q_actual[1])
-        robot.joint3.joint_angle(q_actual[2])
-
-        # rosから現在のroot姿勢取得
-        _, root_rpy = get_xyz_rpy(listener, parent_frame='world', child_frame='hydrus/root')
-
-        # rootの姿勢を更新
-        q_root = np.r_[fixed_root_xyz, root_rpy]
-        
-        # rosから現在のroot姿勢取得
-        # root_xyz, root_rpy = get_xyz_rpy(listener, parent_frame='world', child_frame='hydrus/root')
-
-        # rootの姿勢を更新
-        # q_root = np.r_[root_xyz, root_rpy]
-        fjoint.joint_angle(q_root)
-
         # 参照円軌道上の target_xyz を計算
         theta = 2.0 * np.pi * (k % args.steps) / args.steps
         target_xyz = center_xyz + np.array([args.radius * np.cos(theta),
                                             args.radius * np.sin(theta),
                                             0.0])
-        # (Q3) target_coords を組み立て
-        target_coords = Coordinates(pos=target_xyz)
-
-        # (Q4) IK を解く (= robot の joint を破壊更新)
+        # root位置固定・yaw自由: 機体を target 方向へ aim し関節IKで解く.
+        aim = aim_yaw_for_target(fixed_root_xyz, alpha0, target_xyz)
+        fjoint.joint_angle(np.r_[fixed_root_xyz, 0.0, 0.0, aim])
+        q_actual = joint_reader.get_actual_q()
+        robot.joint1.joint_angle(q_actual[0])
+        robot.joint2.joint_angle(args.fix_angle)
+        robot.joint3.joint_angle(q_actual[2])
         ok, leg5_pos = solve_one_step(
-            robot, leg5, target_coords, link_list, stop=args.ik_stop)
-
+            robot, leg5, Coordinates(pos=target_xyz), link_list,
+            stop=args.ik_stop)
+        # 指令する COG(fc) yaw は, aim した姿勢でのモデル fc 世界 yaw
+        cog_yaw = matrix2rpy(robot.fc.worldrot())[2]
         err = float(np.linalg.norm(leg5_pos[:2] - target_xyz[:2]))
         if k % log_every == 0 or not ok:
             report_step(k, target_xyz, leg5_pos, robot, ok)
-        return target_xyz, err, root_rpy, ok
+        return target_xyz, err, cog_yaw, ok
 
     if viewer is None:
         # ヘッドレス: 1 周だけ回して数値出力
@@ -421,26 +431,23 @@ def main():
         # IKを解くとrootのjointが勝手に更新
         while viewer.is_active:
             if mode == 'SET_MODE':
-                # rosから現在のroot姿勢取得
-                root_xyz, root_rpy = get_xyz_rpy(listener, parent_frame='world', child_frame='hydrus/root')
-                fjoint.joint_angle(np.r_[root_xyz, root_rpy])
-                # 円中心なるときのjointを設定
+                # 円中心: root位置固定・初期yaw・中心関節での leg5 位置
+                fjoint.joint_angle(np.r_[fixed_root_xyz, 0.0, 0.0, root_rpy0[2]])
                 robot.joint1.joint_angle(args.q1_center)
                 robot.joint2.joint_angle(args.fix_angle)
                 robot.joint3.joint_angle(args.q3_center)
-                # 円中心なるときのee位置を計算
                 center_candidate = leg5.worldpos().copy()
-                # 円軌道上の開始点を計算してそこにtargetを配置
+                # 円軌道上の開始点
                 start_target_candidate = center_candidate + np.array([args.radius, 0.0, 0.0])
-                target_coords = Coordinates(pos=start_target_candidate)
-                # IKを解いてleg5の位置を計算して,pub
-                _, leg5_pos = solve_one_step(robot, leg5, target_coords, link_list, stop=args.ik_stop)
+                # 機体を開始点へ aim して関節IK (root位置固定・yaw自由)
+                aim = aim_yaw_for_target(fixed_root_xyz, alpha0, start_target_candidate)
+                fjoint.joint_angle(np.r_[fixed_root_xyz, 0.0, 0.0, aim])
+                _, leg5_pos = solve_one_step(robot, leg5, Coordinates(pos=start_target_candidate), link_list, stop=args.ik_stop)
                 q_target = np.array([robot.joint1.joint_angle(), robot.joint2.joint_angle(), robot.joint3.joint_angle()])
                 cog_target = robot.centroid().copy()
-                _, cog_rpy = get_xyz_rpy(listener, parent_frame='world', child_frame='hydrus/fc')
-                cog_yaw = cog_rpy[2]
-                q_cmd = np.array(q_cmd)  
-                cog_cmd = np.array(cog_cmd)  
+                cog_yaw = matrix2rpy(robot.fc.worldrot())[2]
+                q_cmd = np.array(q_cmd)
+                cog_cmd = np.array(cog_cmd)
                 q_cmd = pub_limit_joint(q_cmd, q_target, args.max_q_step)
                 cog_cmd = pub_limit_nav(cog_cmd, cog_target, args.max_cog_step)
                 pub_command_values(nav_pub, joint_pub, cog_cmd, q_cmd, cog_yaw)
@@ -468,11 +475,9 @@ def main():
                                                               args.radius * np.sin(phi),
                                                               0.0])
                             mark.newcoords(Coordinates(pos=new_wp))
-                        # 初期値を保存してTEST_MODEへ
+                        # TEST_MODEへ (fixed_root_xyz は起動時の値のまま保持)
                         q_cmd = q_cmd.copy()
                         cog_cmd = cog_cmd.copy()
-                        cog_yaw = cog_yaw
-                        fixed_root_xyz = root_xyz.copy()
                         mode = 'TEST_MODE'
                         k = 0
                         errors = []
@@ -485,20 +490,17 @@ def main():
             # 収束したらTEST_MODEへ
             # ============================================================
             elif mode == 'TEST_MODE':
-                target_xyz, err, root_rpy, _ = step_once(k, center_xyz=center_world)
+                # step_once が aim+IK 済みのモデルにしてくれる. cog_yaw も返す.
+                target_xyz, err, cog_yaw, _ = step_once(k, center_xyz=center_world)
                 errors.append(err)
                 # 得られた値をpub
                 q_cmd = pub_limit_joint(q_cmd, np.array([robot.joint1.joint_angle(), robot.joint2.joint_angle(), robot.joint3.joint_angle()]), args.max_q_step)
                 cog_cmd = pub_limit_nav(cog_cmd, robot.centroid().copy(), args.max_cog_step)
-                _, cog_rpy = get_xyz_rpy(listener, parent_frame='world', child_frame='hydrus/fc')
-                cog_yaw = cog_rpy[2]
                 pub_command_values(nav_pub, joint_pub, cog_cmd, q_cmd, cog_yaw)
                 # debug情報をpublish
                 publish_debug(listener, debug_pubs, fixed_root_xyz, target_xyz)
                 # target を可視化マーカーに反映 (これも破壊更新)
                 target_axis.newcoords(Coordinates(pos=target_xyz))
-                # root の姿勢も可視化マーカーに反映(rotについてはyaw,pitch,rollの順で入れる)
-                root_axis.newcoords(Coordinates(pos=fixed_root_xyz, rot=[root_rpy[2], root_rpy[1], root_rpy[0]]))
                 report_step(k, target_xyz, leg5.worldpos(), robot, True)
                 viewer.redraw()
                 rate.sleep()
