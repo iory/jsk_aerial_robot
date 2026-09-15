@@ -53,6 +53,9 @@ class ArmServoTorque(object):
     the target of ``arm_controller`` to the measured positions, so that a
     joint moved by hand while it was off does not jump back.
 
+    In gazebo, ``script/servo_torque_sim.py`` provides the same topics, so this
+    class behaves the same there.
+
     Parameters
     ----------
     namespace : str
@@ -114,21 +117,26 @@ class ArmServoTorque(object):
                     unknown, self.joint_names))
         return joint_names
 
-    @staticmethod
-    def _check_available():
-        if rospy.get_param('/use_sim_time', False):
-            raise RuntimeError(
-                'servo torque can not be switched in simulation: '
-                'the gazebo joints have no servo to turn off')
-
-    def states(self):
+    def states(self, timeout=3.0):
         """Return whether the torque of each arm joint is on.
+
+        spinal publishes ``servo/torque_states`` at 1 Hz, so the first call
+        right after the construction waits for it.
+
+        Parameters
+        ----------
+        timeout : float
+            Time to wait for the first ``servo/torque_states`` [s].
 
         Returns
         -------
         dict
             ``{joint name: bool}`` from ``<namespace>/servo/torque_states``.
         """
+        start = rospy.get_time()
+        while self._torque_states is None and not rospy.is_shutdown() \
+                and rospy.get_time() - start < timeout:
+            rospy.sleep(0.02)
         states = self._torque_states
         if states is None:
             raise RuntimeError(
@@ -155,7 +163,6 @@ class ArmServoTorque(object):
         bool
             True if every joint is reported off within ``timeout``.
         """
-        self._check_available()
         joint_names = self._check_joint_names(joint_names)
         with self._lock:
             return self._switch(joint_names, False, timeout)
@@ -175,7 +182,6 @@ class ArmServoTorque(object):
         bool
             True if every joint is reported on within ``timeout``.
         """
-        self._check_available()
         joint_names = self._check_joint_names(joint_names)
         with self._lock:
             self._hold_current_positions()
