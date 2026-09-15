@@ -49,9 +49,11 @@ class GripperMimicModel(object):
 
     The fingers are prismatic joints that mimic the drive joint in the URDF
     (``position = multiplier * drive_angle + offset``). The gripper width is
-    defined as the sum of the finger joint positions, so it is 0 at the zero
-    position of the fingers in the URDF, and larger values are assumed to be
-    more open.
+    ``open_sign`` times the sum of the finger joint positions: it is 0 at the
+    zero position of the fingers in the URDF, and ``open_sign`` makes larger
+    widths more open. Whether a positive finger motion opens or closes depends
+    on the finger geometry, which the URDF joints alone do not tell; see
+    ``find_gripper_open_sign``.
 
     Parameters
     ----------
@@ -59,9 +61,12 @@ class GripperMimicModel(object):
         URDF string.
     drive_joint_name : str
         Name of the joint that drives the fingers.
+    open_sign : float
+        +1.0 if the sum of the finger joint positions grows as the gripper
+        opens, -1.0 if it shrinks.
     """
 
-    def __init__(self, urdf, drive_joint_name):
+    def __init__(self, urdf, drive_joint_name, open_sign=1.0):
         joints = {j.attrib['name']: j
                   for j in ET.fromstring(urdf).findall('joint')}
         if drive_joint_name not in joints:
@@ -72,6 +77,8 @@ class GripperMimicModel(object):
         self.slope = 0.0
         self.offset = 0.0
         self.finger_joint_names = []
+        self.finger_link_names = []
+        self.finger_mimics = {}
         for name, joint in joints.items():
             mimic = joint.find('mimic')
             if mimic is None or mimic.attrib.get('joint') != drive_joint_name:
@@ -91,6 +98,9 @@ class GripperMimicModel(object):
                 self.slope += multiplier
                 self.offset += offset
                 self.finger_joint_names.append(name)
+                self.finger_link_names.append(
+                    joint.find('child').attrib['link'])
+                self.finger_mimics[name] = (multiplier, offset)
         if len(self.finger_joint_names) == 0 or self.slope == 0.0:
             raise RuntimeError(
                 'no prismatic finger joint mimics {}'.format(drive_joint_name))
@@ -99,8 +109,40 @@ class GripperMimicModel(object):
                 'the limits of {} and its fingers do not overlap'.format(
                     drive_joint_name))
         self.angle_range = (lower, upper)
+        self.set_open_sign(open_sign)
+
+    def set_open_sign(self, open_sign):
+        """Set the direction of the width.
+
+        Parameters
+        ----------
+        open_sign : float
+            +1.0 or -1.0, see the class description.
+        """
+        if open_sign not in (1.0, -1.0):
+            raise ValueError(
+                'open_sign must be 1.0 or -1.0, but given {}'.format(
+                    open_sign))
+        self.open_sign = open_sign
+        lower, upper = self.angle_range
         self.width_range = tuple(sorted(
             [self.width(lower), self.width(upper)]))
+
+    def finger_positions(self, angle):
+        """Return the finger joint positions for a drive joint angle.
+
+        Parameters
+        ----------
+        angle : float
+            Drive joint angle [rad].
+
+        Returns
+        -------
+        dict
+            ``{finger joint name: position [m]}``.
+        """
+        return {name: multiplier * angle + offset
+                for name, (multiplier, offset) in self.finger_mimics.items()}
 
     @staticmethod
     def _limit(joint):
@@ -114,11 +156,71 @@ class GripperMimicModel(object):
 
     def width(self, angle):
         """Return the gripper width [m] for a drive joint angle [rad]."""
-        return self.slope * angle + self.offset
+        return self.open_sign * (self.slope * angle + self.offset)
 
     def angle(self, width):
         """Return the drive joint angle [rad] for a gripper width [m]."""
-        return (width - self.offset) / self.slope
+        return (self.open_sign * width - self.offset) / self.slope
+
+
+def find_gripper_open_sign(robot, gripper):
+    """Find whether the finger joint positions grow as the gripper opens.
+
+    The fingers of ``robot`` are placed at both ends of
+    ``gripper.angle_range``; the end where the centroids of the finger visual
+    meshes are farther apart is the open end. The joint angles of ``robot``
+    are restored afterwards.
+
+    Parameters
+    ----------
+    robot : skrobot.model.RobotModel
+        Robot model with the visual meshes of the finger links.
+    gripper : GripperMimicModel
+        Gripper whose direction is determined.
+
+    Returns
+    -------
+    float
+        ``open_sign`` for ``gripper``.
+    """
+    joints = [getattr(robot, name) for name in gripper.finger_joint_names]
+    saved = [joint.joint_angle() for joint in joints]
+
+    def finger_spread(angle):
+        positions = gripper.finger_positions(angle)
+        for name, joint in zip(gripper.finger_joint_names, joints):
+            joint.joint_angle(positions[name])
+        centroids = []
+        for link_name in gripper.finger_link_names:
+            link = getattr(robot, link_name)
+            meshes = link.visual_mesh
+            if not isinstance(meshes, list):
+                meshes = [meshes]
+            meshes = [m for m in meshes if m is not None]
+            if not meshes:
+                raise RuntimeError(
+                    'finger link {} has no visual mesh to find the open '
+                    'direction; pass gripper_open_sign'.format(link_name))
+            centroid = np.mean([m.centroid for m in meshes], axis=0)
+            centroids.append(link.worldcoords().transform_vector(centroid))
+        return np.mean([np.linalg.norm(a - b)
+                        for i, a in enumerate(centroids)
+                        for b in centroids[i + 1:]])
+
+    try:
+        lower, upper = gripper.angle_range
+        spread_lower = finger_spread(lower)
+        spread_upper = finger_spread(upper)
+    finally:
+        for joint, angle in zip(joints, saved):
+            joint.joint_angle(angle)
+    if abs(spread_upper - spread_lower) < 1e-6:
+        raise RuntimeError(
+            'the fingers are equally apart at both ends of {}; '
+            'pass gripper_open_sign'.format(gripper.drive_joint_name))
+    opens_with_angle = spread_upper > spread_lower
+    # width = open_sign * slope * angle + const must grow toward the open end
+    return 1.0 if (gripper.slope > 0) == opens_with_angle else -1.0
 
 
 class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
@@ -141,6 +243,9 @@ class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
     gripper_joint_name : str or None
         Joint of ``arm_controller`` that drives the gripper fingers. If None,
         the joint whose prismatic mimic joints are the fingers in the URDF.
+    gripper_open_sign : float or None
+        ``open_sign`` of ``GripperMimicModel``. If None, it is found from the
+        finger meshes of ``robot`` by ``find_gripper_open_sign``.
     sync_base_pose : bool
         If True, ``update_robot_state`` also moves the root of ``robot`` so
         that the baselink matches ``<namespace>/uav/baselink/odom``.
@@ -155,7 +260,7 @@ class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
 
     def __init__(self, robot=None, namespace='gimbalrotor',
                  arm_controller_ns='arm/arm_controller',
-                 gripper_joint_name=None,
+                 gripper_joint_name=None, gripper_open_sign=None,
                  sync_base_pose=True, use_flight=True, **kwargs):
         if not rospy.core.is_initialized():
             rospy.init_node('gimbalrotor_skrobot_interface', anonymous=True,
@@ -196,6 +301,10 @@ class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
                 'arm controller /{}/{}/follow_joint_trajectory is not '
                 'available'.format(namespace, arm_controller_ns))
         self.gripper = self._gripper_model(urdf, gripper_joint_name)
+        if gripper_open_sign is None:
+            gripper_open_sign = find_gripper_open_sign(
+                self.robot, self.gripper)
+        self.gripper.set_open_sign(gripper_open_sign)
 
     @property
     def flight(self):
