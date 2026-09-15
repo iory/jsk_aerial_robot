@@ -9,7 +9,7 @@
   <arg name="arm_controller_ns" default="arm/arm_controller" />
   <arg name="rviz_config" default="$(find gimbalrotor_remote)/config/arm.rviz" />
 
-  <!-- torque on/off services used by the ArmTorquePanel of rviz -->
+  <!-- torque on/off services used by the ArmControlPanel of rviz -->
   <node pkg="gimbalrotor" type="arm_torque_server.py" name="arm_torque" ns="$(arg robot_ns)" output="screen">
     <param name="robot_ns" value="$(arg robot_ns)" />
     <param name="arm_controller_ns" value="$(arg arm_controller_ns)" />

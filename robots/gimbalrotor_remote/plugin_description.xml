@@ -1,9 +1,9 @@
 <library path="lib/libgimbalrotor_remote">
-  <class name="gimbalrotor_remote/ArmTorquePanel"
-         type="gimbalrotor_remote::ArmTorquePanel"
+  <class name="gimbalrotor_remote/ArmControlPanel"
+         type="gimbalrotor_remote::ArmControlPanel"
          base_class_type="rviz::Panel">
     <description>
-      Turn the servo torque of the gimbalrotor arm joints on and off through the services of gimbalrotor/arm_torque_server.py.
+      Turn the servo torque of the gimbalrotor arm joints on and off through the services of gimbalrotor/arm_torque_server.py, and move the joints through the FollowJointTrajectory action of the arm controller.
     </description>
   </class>
 </library>

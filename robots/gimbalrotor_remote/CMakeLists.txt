@@ -4,11 +4,15 @@ project(gimbalrotor_remote)
 add_compile_options(-std=c++17)
 
 find_package(catkin REQUIRED COMPONENTS
+  actionlib
+  control_msgs
   pluginlib
   roscpp
   rviz
+  sensor_msgs
   spinal
   std_srvs
+  urdf
   )
 
 set(CMAKE_AUTOMOC ON)
@@ -17,7 +21,7 @@ find_package(Qt5 REQUIRED COMPONENTS Widgets)
 add_definitions(-DQT_NO_KEYWORDS)
 
 catkin_package(
-  CATKIN_DEPENDS pluginlib roscpp rviz spinal std_srvs
+  CATKIN_DEPENDS actionlib control_msgs pluginlib roscpp rviz sensor_msgs spinal std_srvs urdf
   )
 
 include_directories(
@@ -25,8 +29,8 @@ include_directories(
   )
 
 add_library(${PROJECT_NAME}
-  src/arm_torque_panel.cpp
-  src/arm_torque_panel.h
+  src/arm_control_panel.cpp
+  src/arm_control_panel.h
   )
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} Qt5::Widgets)
 add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})

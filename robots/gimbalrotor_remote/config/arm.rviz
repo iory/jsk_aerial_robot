@@ -1,8 +1,8 @@
 Panels:
   - Class: rviz/Displays
     Name: Displays
-  - Class: gimbalrotor_remote/ArmTorquePanel
-    Name: ArmTorquePanel
+  - Class: gimbalrotor_remote/ArmControlPanel
+    Name: ArmControlPanel
     Robot Namespace: gimbalrotor
     Arm Controller Namespace: arm/arm_controller
     Torque Service Namespace: arm_torque

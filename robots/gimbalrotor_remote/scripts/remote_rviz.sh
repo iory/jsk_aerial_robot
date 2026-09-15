@@ -1,5 +1,5 @@
 #!/bin/bash
-# Launch rviz with the arm torque panel on this PC, connected to the ROS master of the robot.
+# Launch rviz with the arm control panel on this PC, connected to the ROS master of the robot.
 #
 # usage: rosrun gimbalrotor_remote remote_rviz.sh ROBOT_HOST [roslaunch args...]
 #
