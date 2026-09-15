@@ -59,6 +59,7 @@ target_link_libraries(gimbalrotor_navigation ${catkin_LIBRARIES})
 
 add_executable(arm_hardware_interface_node src/arm/arm_hardware_interface_node.cpp src/arm/arm_hardware_interface.cpp)
 target_link_libraries(arm_hardware_interface_node ${catkin_LIBRARIES})
+add_dependencies(arm_hardware_interface_node ${catkin_EXPORTED_TARGETS})
 
 install(TARGETS arm_hardware_interface_node
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

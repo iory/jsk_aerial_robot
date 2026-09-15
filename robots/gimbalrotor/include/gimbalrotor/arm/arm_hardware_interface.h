@@ -7,6 +7,7 @@
 #include <hardware_interface/robot_hw.h>
 #include <ros/ros.h>
 #include <sensor_msgs/JointState.h>
+#include <spinal/ServoTorqueCmd.h>
 
 #include <mutex>
 #include <string>
@@ -23,6 +24,10 @@ namespace gimbalrotor
  *
  * The command is published only when it changes or when "command_resend_interval" has passed,
  * so that the holding command does not follow the (sagging) measured position.
+ *
+ * spinal turns the torque of a servo back on when it receives a position command, so a joint whose
+ * torque is turned off through "servo/torque_enable" (spinal::ServoTorqueCmd, indexed by the servo id
+ * of servo_bridge) is left out of the command until its torque is turned on again.
  */
 class ArmHardwareInterface : public hardware_interface::RobotHW
 {
@@ -43,15 +48,18 @@ public:
 
 private:
   void jointStateCallback(const sensor_msgs::JointStateConstPtr& msg);
+  void torqueCommandCallback(const spinal::ServoTorqueCmdConstPtr& msg);
 
   hardware_interface::JointStateInterface joint_state_interface_;
   hardware_interface::PositionJointInterface position_joint_interface_;
 
   ros::Subscriber joint_state_sub_;
+  ros::Subscriber torque_command_sub_;
   ros::Publisher command_pub_;
 
   std::vector<std::string> joint_names_;
   std::unordered_map<std::string, size_t> joint_indices_;
+  std::unordered_map<int, size_t> servo_id_indices_;
 
   /* data exposed to controllers (accessed only in the control loop) */
   std::vector<double> position_;
@@ -64,6 +72,8 @@ private:
   std::vector<double> received_position_;
   std::vector<double> received_effort_;
   std::vector<bool> received_;
+  /* true while the torque of the joint is turned off; guarded by state_mutex_ */
+  std::vector<bool> torque_disabled_;
   ros::Time last_received_time_;
 
   std::vector<double> last_published_command_;

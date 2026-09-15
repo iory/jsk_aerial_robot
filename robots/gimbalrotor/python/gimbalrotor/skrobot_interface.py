@@ -19,6 +19,13 @@ Example
 >>> ri.stop_grasp()    # open the gripper
 >>> ri.move_to([0.0, 0.0, 1.2])
 >>> ri.land()
+
+Arm only (no flight stack), e.g. to move the arm by hand:
+
+>>> ri = GimbalrotorROSRobotInterface(use_flight=False)
+>>> ri.torque_off()                       # all arm joints
+>>> ri.torque_on(['arm_joint5_joint1'])   # only the listed joints
+>>> ri.torque_on()
 """
 
 import xml.etree.ElementTree as ET
@@ -32,6 +39,9 @@ from skrobot.coordinates.math import quaternion2matrix
 from skrobot.coordinates.math import xyzw2wxyz
 from skrobot.interfaces.ros.base import ROSRobotInterfaceBase
 from skrobot.models.urdf import RobotModelFromURDF
+from spinal.msg import ServoTorqueCmd
+from spinal.msg import ServoTorqueStates
+import trajectory_msgs.msg
 
 
 class GripperMimicModel(object):
@@ -134,6 +144,11 @@ class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
     sync_base_pose : bool
         If True, ``update_robot_state`` also moves the root of ``robot`` so
         that the baselink matches ``<namespace>/uav/baselink/odom``.
+        Ignored when ``use_flight`` is False.
+    use_flight : bool
+        If False, the flight stack (``aerial_robot_base``) is not required:
+        only the arm, the gripper and the servo torque are available, and
+        the flight methods raise ``RuntimeError``.
     **kwargs
         Passed to ``ROSRobotInterfaceBase``.
     """
@@ -141,7 +156,7 @@ class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
     def __init__(self, robot=None, namespace='gimbalrotor',
                  arm_controller_ns='arm/arm_controller',
                  gripper_joint_name=None,
-                 sync_base_pose=True, **kwargs):
+                 sync_base_pose=True, use_flight=True, **kwargs):
         if not rospy.core.is_initialized():
             rospy.init_node('gimbalrotor_skrobot_interface', anonymous=True,
                             disable_signals=True)
@@ -155,12 +170,24 @@ class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
             robot = RobotModelFromURDF(urdf=urdf)
         self.baselink_name = self._baselink_name(urdf)
         self.arm_controller_ns = arm_controller_ns
-        self.sync_base_pose = sync_base_pose
+        self.use_flight = use_flight
+        self.sync_base_pose = sync_base_pose and use_flight
 
-        self.flight = RobotInterface(robot_ns='/' + namespace)
-        if self.flight.base_odom is None or self.flight.cog_odom is None:
-            raise RuntimeError(
-                'odometry of /{} is not received'.format(namespace))
+        self._flight = None
+        if use_flight:
+            self._flight = RobotInterface(robot_ns='/' + namespace)
+            if self._flight.base_odom is None or self._flight.cog_odom is None:
+                raise RuntimeError(
+                    'odometry of /{} is not received'.format(namespace))
+
+        self._servo_ids = self._load_servo_ids(namespace)
+        self._torque_states = None
+        self._torque_pub = rospy.Publisher(
+            '/{}/servo/torque_enable'.format(namespace), ServoTorqueCmd,
+            queue_size=10)
+        self._torque_sub = rospy.Subscriber(
+            '/{}/servo/torque_states'.format(namespace), ServoTorqueStates,
+            self._torque_states_cb, queue_size=1)
 
         super(GimbalrotorROSRobotInterface, self).__init__(
             robot, namespace=namespace, **kwargs)
@@ -169,6 +196,41 @@ class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
                 'arm controller /{}/{}/follow_joint_trajectory is not '
                 'available'.format(namespace, arm_controller_ns))
         self.gripper = self._gripper_model(urdf, gripper_joint_name)
+
+    @property
+    def flight(self):
+        """``aerial_robot_base.robot_interface.RobotInterface``."""
+        if self._flight is None:
+            raise RuntimeError(
+                'the flight interface is disabled (use_flight=False)')
+        return self._flight
+
+    @staticmethod
+    def _load_servo_ids(namespace):
+        """Return ``{joint name: servo id}`` of every servo in servo_bridge.
+
+        Parameters
+        ----------
+        namespace : str
+            Robot namespace.
+
+        Returns
+        -------
+        dict
+            Servo id (the index of spinal) of each servo joint.
+        """
+        param = '/{}/servo_controller'.format(namespace)
+        if not rospy.has_param(param):
+            raise RuntimeError('rosparam {} is not found'.format(param))
+        servo_ids = {}
+        for group in rospy.get_param(param).values():
+            if not isinstance(group, dict):
+                continue
+            for key, servo in group.items():
+                if key.startswith('controller') and isinstance(servo, dict) \
+                   and 'name' in servo and 'id' in servo:
+                    servo_ids[servo['name']] = int(servo['id'])
+        return servo_ids
 
     def _gripper_model(self, urdf, gripper_joint_name):
         joint_names = self.arm_controller['joint_names']
@@ -398,6 +460,160 @@ class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
         target_yaw = np.arctan2(np.sin(current_yaw + yaw),
                                 np.cos(current_yaw + yaw))
         return self.move_to(target, yaw=target_yaw, **kwargs)
+
+    # ---------------------------------------------------------------------
+    # servo torque
+    # ---------------------------------------------------------------------
+    def _torque_states_cb(self, msg):
+        self._torque_states = list(msg.torque_enable)
+
+    def _torque_joint_names(self, joint_names):
+        arm_joint_names = list(self.arm_controller['joint_names'])
+        if joint_names is None:
+            return arm_joint_names
+        if isinstance(joint_names, str):
+            raise TypeError(
+                'joint_names must be a list of joint names, but given a str '
+                '{!r}'.format(joint_names))
+        joint_names = list(joint_names)
+        unknown = [name for name in joint_names if name not in arm_joint_names]
+        if unknown:
+            raise ValueError(
+                '{} are not joints of arm_controller {}'.format(
+                    unknown, arm_joint_names))
+        missing = [name for name in joint_names if name not in self._servo_ids]
+        if missing:
+            raise RuntimeError(
+                'servo ids of {} are not found in /{}/servo_controller'.format(
+                    missing, self.namespace))
+        return joint_names
+
+    def _check_torque_available(self):
+        if rospy.get_param('/use_sim_time', False):
+            raise RuntimeError(
+                'servo torque can not be switched in simulation: '
+                'the gazebo joints have no servo to turn off')
+
+    def torque_states(self):
+        """Return whether the torque of each arm joint is on.
+
+        Returns
+        -------
+        dict
+            ``{joint name: bool}`` from ``<namespace>/servo/torque_states``.
+        """
+        states = self._torque_states
+        if states is None:
+            raise RuntimeError(
+                '/{}/servo/torque_states is not received'.format(
+                    self.namespace))
+        result = {}
+        for name in self.arm_controller['joint_names']:
+            servo_id = self._servo_ids.get(name)
+            if servo_id is not None and servo_id < len(states):
+                result[name] = bool(states[servo_id])
+        return result
+
+    def _switch_torque(self, joint_names, enable, timeout):
+        msg = ServoTorqueCmd()
+        msg.index = [self._servo_ids[name] for name in joint_names]
+        msg.torque_enable = [1 if enable else 0] * len(joint_names)
+        start = rospy.get_time()
+        last_sent = None
+        while not rospy.is_shutdown():
+            now = rospy.get_time()
+            states = self._torque_states
+            if states is not None and all(
+                    self._servo_ids[name] < len(states)
+                    and bool(states[self._servo_ids[name]]) == enable
+                    for name in joint_names):
+                return True
+            if now - start > timeout:
+                rospy.logwarn(
+                    '[%s] torque %s of %s is not confirmed by '
+                    '/%s/servo/torque_states in %.1f s', rospy.get_name(),
+                    'on' if enable else 'off', joint_names, self.namespace,
+                    timeout)
+                return False
+            # spinal may miss a command; repeat it until the state follows
+            if last_sent is None or now - last_sent > 0.5:
+                self._torque_pub.publish(msg)
+                last_sent = now
+            rospy.sleep(0.02)
+        return False
+
+    def torque_off(self, joint_names=None, timeout=2.0):
+        """Turn off the servo torque of arm joints.
+
+        The joints go limp: an arm joint holding against gravity falls. While
+        a joint is off, ``arm_hardware_interface`` does not send it position
+        commands (spinal would turn the torque back on), so trajectories do
+        not move it.
+
+        Parameters
+        ----------
+        joint_names : list of str or None
+            Joints of ``arm_controller``. If None, all of them.
+        timeout : float
+            Time to wait for ``servo/torque_states`` to report off [s].
+
+        Returns
+        -------
+        bool
+            True if every joint is reported off within ``timeout``.
+        """
+        self._check_torque_available()
+        joint_names = self._torque_joint_names(joint_names)
+        return self._switch_torque(joint_names, False, timeout)
+
+    def torque_on(self, joint_names=None, timeout=2.0):
+        """Turn on the servo torque of arm joints, holding their current pose.
+
+        Before the torque is turned on, the target of ``arm_controller`` is
+        moved to the measured positions of all its joints, so that a joint
+        moved by hand while it was off does not jump back to the old target.
+
+        Parameters
+        ----------
+        joint_names : list of str or None
+            Joints of ``arm_controller``. If None, all of them.
+        timeout : float
+            Time to wait for ``servo/torque_states`` to report on [s].
+
+        Returns
+        -------
+        bool
+            True if every joint is reported on within ``timeout``.
+        """
+        self._check_torque_available()
+        joint_names = self._torque_joint_names(joint_names)
+        self._hold_current_positions()
+        return self._switch_torque(joint_names, True, timeout)
+
+    def _hold_current_positions(self, duration=0.1):
+        """Replace the arm_controller target by the measured positions."""
+        if not self.update_robot_state(wait_until_update=True):
+            raise RuntimeError(
+                'joint states are not received from {}'.format(
+                    self.joint_states_topic))
+        controller = self.arm_controller
+        names = self.robot_state['name']
+        positions = self.robot_state['position']
+        missing = [n for n in controller['joint_names'] if n not in names]
+        if missing:
+            raise RuntimeError(
+                'joint states of {} are not received'.format(missing))
+        goal = control_msgs.msg.FollowJointTrajectoryGoal()
+        goal.trajectory.joint_names = list(controller['joint_names'])
+        goal.trajectory.points = [trajectory_msgs.msg.JointTrajectoryPoint(
+            positions=[positions[names.index(n)]
+                       for n in controller['joint_names']],
+            time_from_start=rospy.Duration(duration))]
+        action = self.controller_table[controller['controller_type']][0]
+        action.send_goal(goal)
+        # the result is not checked: a joint that is still off may drift out
+        # of the goal tolerance, and the controller holds its target anyway
+        action.wait_for_result(rospy.Duration(duration + 2.0))
 
     # ---------------------------------------------------------------------
     # gripper
