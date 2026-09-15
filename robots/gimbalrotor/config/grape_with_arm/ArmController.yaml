@@ -1,0 +1,27 @@
+# ros_control configuration for the arm (loaded in <robot_ns>/arm)
+#
+# hardware : src/arm/arm_hardware_interface.cpp (bridge between joint_states and joints_ctrl of servo_bridge)
+# action   : <robot_ns>/arm/arm_controller/follow_joint_trajectory
+# topic    : <robot_ns>/arm/arm_controller/command (trajectory_msgs/JointTrajectory)
+
+arm_controller:
+  type: position_controllers/JointTrajectoryController
+  joints:
+    - arm_joint1_joint1
+    - arm_joint2_joint1
+    - arm_joint3_joint1
+    - arm_joint4_joint1
+    - arm_joint5_joint1
+  state_publish_rate: 20
+  action_monitor_rate: 10
+  stop_trajectory_duration: 0.5
+  constraints:
+    goal_time: 1.0
+    # velocity is not measured by servo_bridge (always 0), so this check is always satisfied
+    stopped_velocity_tolerance: 0.0
+    # position tolerance [rad], 0 disables the check
+    arm_joint1_joint1: {trajectory: 0.0, goal: 0.0}
+    arm_joint2_joint1: {trajectory: 0.0, goal: 0.0}
+    arm_joint3_joint1: {trajectory: 0.0, goal: 0.0}
+    arm_joint4_joint1: {trajectory: 0.0, goal: 0.0}
+    arm_joint5_joint1: {trajectory: 0.0, goal: 0.0}
