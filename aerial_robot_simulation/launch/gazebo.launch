@@ -12,6 +12,8 @@
 
   <!-- gazebo world -->
   <include file="$(find gazebo_ros)/launch/empty_world.launch" if="$(arg launch_gazebo)">
+    <!-- gzclient (Ogre) fails with "Unable to create the rendering window" under Qt's wayland backend -->
+    <env name="QT_QPA_PLATFORM" value="xcb"/>
     <arg name="world_name" value="$(arg worldtype)"/>
     <arg name="debug" value="false" />
     <arg name="gui" value="$(arg gui)" />
