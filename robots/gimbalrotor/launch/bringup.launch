@@ -15,12 +15,13 @@
   <arg name="direct_model_name" />
   <arg name="spawn_x" default="0.0"/>
   <arg name="spawn_y" default="0.0"/>
-  <arg name="spawn_z" default="0.0"/>
   <arg name="spawn_yaw" default="0.0"/>
   <arg name="config_dir" default="$(find gimbalrotor)/config"/>
   <arg name="robot_id" default="" />
   <arg name="robot_ns" value="gimbalrotor$(arg robot_id)" />
   <arg name="airframe" default="quad" />
+  <!-- grape_with_arm stands on legs reaching 0.318 m below the body; spawning lower buries the feet and flips it -->
+  <arg name="spawn_z" default="$(eval 0.33 if arg('airframe') == 'grape_with_arm' else 0.0)"/>
   <arg name="launch_arm_controller" default="$(eval arg('airframe') == 'grape_with_arm')" />
   <arg name="arm_control_rate" default="20.0" />
 

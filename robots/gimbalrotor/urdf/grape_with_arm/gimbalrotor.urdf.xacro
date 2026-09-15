@@ -88,6 +88,23 @@
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 -0.0 0.0"/>
     </collision>
+    <!-- landing feet: pads at the bottom of the four legs of main_body.dae -->
+    <xacro:property name="foot_size" value="0.032 0.072 0.028"/>
+    <xacro:property name="foot_x" value="0.177"/>
+    <xacro:property name="foot_y" value="0.200"/>
+    <xacro:property name="foot_z" value="-0.304"/>
+    <xacro:macro name="foot_collision" params="sx sy">
+      <collision>
+        <geometry>
+          <box size="${foot_size}"/>
+        </geometry>
+        <origin xyz="${sx * foot_x} ${sy * foot_y} ${foot_z}" rpy="0.0 0.0 0.0"/>
+      </collision>
+    </xacro:macro>
+    <xacro:foot_collision sx="1" sy="1"/>
+    <xacro:foot_collision sx="1" sy="-1"/>
+    <xacro:foot_collision sx="-1" sy="1"/>
+    <xacro:foot_collision sx="-1" sy="-1"/>
   </link>
 
   <link name="gimbal1_link">
