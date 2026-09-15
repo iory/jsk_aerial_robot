@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   spinal
   tf
+  urdf
   )
 
 # Depend on system install of Gazebo
@@ -25,7 +26,7 @@ include_directories(${orocos_kdl_INCLUDE_DIRS} ${urdfdom_headers_INCLUDE_DIRS})
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES aerial_robot_hw_sim spinal_interface flight_controllers
-  CATKIN_DEPENDS aerial_robot_base aerial_robot_estimation aerial_robot_msgs aerial_robot_model gazebo_ros_control kdl_parser roscpp spinal tf
+  CATKIN_DEPENDS aerial_robot_base aerial_robot_estimation aerial_robot_msgs aerial_robot_model gazebo_ros_control kdl_parser roscpp spinal tf urdf
   DEPENDS GAZEBO orocos_kdl urdfdom_headers
 )
 
@@ -60,11 +61,15 @@ target_link_libraries(aerial_robot_hw_sim spinal_interface ${catkin_LIBRARIES} $
 add_library(mujoco_aerial_robot_hw_sim src/mujoco/mujoco_aerial_robot_hw_sim.cpp )
 target_link_libraries(mujoco_aerial_robot_hw_sim ${catkin_LIBRARIES} mujoco_spinal_interface)
 
+# gazebo classic ignores <mimic> of URDF: drive mimic joints from the robot_description
+add_library(aerial_robot_mimic_joint_plugin src/mimic_joint_plugin.cpp)
+target_link_libraries(aerial_robot_mimic_joint_plugin ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
+
 
 install(DIRECTORY include/${PROJECT_NAME}/
   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
 
-install(TARGETS aerial_robot_hw_sim spinal_interface flight_controllers mujoco_spinal_interface mujoco_aerial_robot_hw_sim
+install(TARGETS aerial_robot_hw_sim spinal_interface flight_controllers mujoco_spinal_interface mujoco_aerial_robot_hw_sim aerial_robot_mimic_joint_plugin
   DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 )
 
