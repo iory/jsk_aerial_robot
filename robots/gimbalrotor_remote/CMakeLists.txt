@@ -5,12 +5,15 @@ add_compile_options(-std=c++17)
 
 find_package(catkin REQUIRED COMPONENTS
   actionlib
+  aerial_robot_msgs
   control_msgs
+  nav_msgs
   pluginlib
   roscpp
   rviz
   sensor_msgs
   spinal
+  std_msgs
   std_srvs
   urdf
   )
@@ -21,7 +24,7 @@ find_package(Qt5 REQUIRED COMPONENTS Widgets)
 add_definitions(-DQT_NO_KEYWORDS)
 
 catkin_package(
-  CATKIN_DEPENDS actionlib control_msgs pluginlib roscpp rviz sensor_msgs spinal std_srvs urdf
+  CATKIN_DEPENDS actionlib aerial_robot_msgs control_msgs nav_msgs pluginlib roscpp rviz sensor_msgs spinal std_msgs std_srvs urdf
   )
 
 include_directories(
@@ -31,6 +34,8 @@ include_directories(
 add_library(${PROJECT_NAME}
   src/arm_control_panel.cpp
   src/arm_control_panel.h
+  src/flight_teleop_panel.cpp
+  src/flight_teleop_panel.h
   )
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} Qt5::Widgets)
 add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})

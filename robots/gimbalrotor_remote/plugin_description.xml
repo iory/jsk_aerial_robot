@@ -6,4 +6,11 @@
       Turn the servo torque of the gimbalrotor arm joints on and off through the services of gimbalrotor/arm_torque_server.py, and move the joints through the FollowJointTrajectory action of the arm controller.
     </description>
   </class>
+  <class name="gimbalrotor_remote/FlightTeleopPanel"
+         type="gimbalrotor_remote::FlightTeleopPanel"
+         base_class_type="rviz::Panel">
+    <description>
+      Basic teleoperation of an aerial robot (arming, takeoff, land, halt and velocity commands), equivalent to aerial_robot_base/keyboard_command.py.
+    </description>
+  </class>
 </library>
