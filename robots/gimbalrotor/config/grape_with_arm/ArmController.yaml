@@ -20,8 +20,10 @@ arm_controller:
     # velocity is not measured by servo_bridge (always 0), so this check is always satisfied
     stopped_velocity_tolerance: 0.0
     # position tolerance [rad], 0 disables the check
-    arm_joint1_joint1: {trajectory: 0.0, goal: 0.0}
-    arm_joint2_joint1: {trajectory: 0.0, goal: 0.0}
-    arm_joint3_joint1: {trajectory: 0.0, goal: 0.0}
-    arm_joint4_joint1: {trajectory: 0.0, goal: 0.0}
-    arm_joint5_joint1: {trajectory: 0.0, goal: 0.0}
+    # goal: the result is GOAL_TOLERANCE_VIOLATED unless every joint is within it goal_time after the trajectory ends
+    # trajectory: left disabled, a 1 s move lags the desired position by up to ~0.2 rad while moving
+    arm_joint1_joint1: {trajectory: 0.0, goal: 0.05}
+    arm_joint2_joint1: {trajectory: 0.0, goal: 0.05}
+    arm_joint3_joint1: {trajectory: 0.0, goal: 0.05}
+    arm_joint4_joint1: {trajectory: 0.0, goal: 0.05}
+    arm_joint5_joint1: {trajectory: 0.0, goal: 0.05}

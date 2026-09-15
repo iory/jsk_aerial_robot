@@ -52,9 +52,18 @@ servo_controller:
     controller4:
       id: 7
       name: arm_joint4_joint1
+      # the group i leaves ~0.045 rad for tens of seconds: p holds the ~0.44 N m gravity torque
+      # of the links beyond joint4 (p * e = 10 * 0.045). i = 10 removes it with a time constant
+      # of p / i = 1 s, still stable for I = 5.3e-3 kg m^2 (d * p > I * i).
+      simulation:
+        pid: {p: 10.0, i: 10.0, d: 0.2, i_clamp_max: 2.0, i_clamp_min: -2.0}
 
     controller5:
       id: 8
       name: arm_joint5_joint1
+      # joint5 drives the gripper screw: in gazebo it only rotates arm_joint5_link1
+      # (I = 6.4e-8 kg m^2, the gripper follows via <mimic>), so the group gains diverge
+      # at the 1 ms step (explicit damping needs d * dt / I < 2).
+      # p = I * wn^2, d = 2 * zeta * I * wn with wn = 100 rad/s, zeta = 1.
       simulation:
-        pid: {p: 0.0005, i: 0, d: 0.0005, i_clamp_max: 2.0, i_clamp_min: -2.0}
+        pid: {p: 0.00064, i: 0.0, d: 0.0000128, i_clamp_max: 2.0, i_clamp_min: -2.0}

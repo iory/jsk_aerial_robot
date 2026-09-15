@@ -19,4 +19,11 @@
   <xacro:joint_transmission joint="gimbal3"/>
   <xacro:joint_transmission joint="gimbal4"/>
 
+  <!-- the gripper joints follow arm_joint5_joint1 through <mimic>, which gazebo classic ignores -->
+  <gazebo>
+    <plugin name="mimic_joint_plugin" filename="libaerial_robot_mimic_joint_plugin.so">
+      <robotNamespace>$(arg robot_name)</robotNamespace>
+    </plugin>
+  </gazebo>
+
 </robot>
