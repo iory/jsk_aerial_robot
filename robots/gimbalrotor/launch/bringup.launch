@@ -111,7 +111,16 @@
       <param name="control_rate" value="$(arg arm_control_rate)" />
       <param name="servo_group" value="joints" />
     </node>
-    <node pkg="controller_manager" type="spawner" name="arm_controller_spawner" ns="$(arg robot_ns)/arm" output="screen" args="arm_controller" />
+    <node pkg="controller_manager" type="spawner" name="arm_controller_spawner" ns="$(arg robot_ns)/arm" output="screen" args="arm_controller" unless="$(arg simulation)" />
+    <!-- simulation: the arm falls until servo_bridge loads its joint controllers, and the trajectory controller
+         holds the pose it starts in, so start it only after the arm has settled at the servo init_value -->
+    <group if="$(arg simulation)">
+      <node pkg="gimbalrotor" type="arm_initial_pose_gate.py" name="arm_initial_pose_gate" ns="$(arg robot_ns)" output="screen">
+        <param name="servo_group" value="joints" />
+      </node>
+      <node pkg="controller_manager" type="spawner" name="arm_controller_spawner" ns="$(arg robot_ns)/arm" output="screen"
+            args="--wait-for /$(arg robot_ns)/arm_initial_pose_gate/ready arm_controller" />
+    </group>
   </group>
 
 </launch>
