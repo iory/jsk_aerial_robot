@@ -1,0 +1,43 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+  - Class: gimbalrotor_remote/ArmTorquePanel
+    Name: ArmTorquePanel
+    Robot Namespace: gimbalrotor
+    Arm Controller Namespace: arm/arm_controller
+    Torque Service Namespace: arm_torque
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz/Grid
+      Name: Grid
+      Enabled: true
+      Reference Frame: <Fixed Frame>
+    - Class: rviz/RobotModel
+      Name: RobotModel
+      Enabled: true
+      Robot Description: /gimbalrotor/robot_description
+      TF Prefix: gimbalrotor
+      Visual Enabled: true
+      Collision Enabled: false
+    - Class: rviz/TF
+      Name: TF
+      Enabled: false
+  Global Options:
+    Fixed Frame: gimbalrotor/main_body
+    Background Color: 48; 48; 48
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+    - Class: rviz/MoveCamera
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 1.2
+      Focal Point:
+        X: 0.3
+        Y: 0
+        Z: -0.1
+      Pitch: 0.4
+      Yaw: 2.4
+      Target Frame: <Fixed Frame>

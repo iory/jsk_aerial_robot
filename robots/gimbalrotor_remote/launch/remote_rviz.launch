@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!--
+  Run on an operator PC connected to the ROS master of the robot:
+    rosrun gimbalrotor_remote remote_rviz.sh <robot ip>
+  which sets ROS_MASTER_URI / ROS_IP and launches this file.
+-->
+<launch>
+  <arg name="robot_ns" default="gimbalrotor" />
+  <arg name="arm_controller_ns" default="arm/arm_controller" />
+  <arg name="rviz_config" default="$(find gimbalrotor_remote)/config/arm.rviz" />
+
+  <!-- torque on/off services used by the ArmTorquePanel of rviz -->
+  <node pkg="gimbalrotor" type="arm_torque_server.py" name="arm_torque" ns="$(arg robot_ns)" output="screen">
+    <param name="robot_ns" value="$(arg robot_ns)" />
+    <param name="arm_controller_ns" value="$(arg arm_controller_ns)" />
+  </node>
+
+  <node pkg="rviz" type="rviz" name="$(anon rviz)" args="-d $(arg rviz_config)" output="screen" />
+</launch>
