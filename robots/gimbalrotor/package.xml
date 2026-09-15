@@ -20,6 +20,7 @@
   <build_depend>controller_manager</build_depend>
   <build_depend>hardware_interface</build_depend>
   <build_depend>sensor_msgs</build_depend>
+  <build_depend>catkin_virtualenv</build_depend>
 
   <run_depend>aerial_robot_control</run_depend>
   <run_depend>aerial_robot_estimation</run_depend>
@@ -39,7 +40,7 @@
   <run_depend>rospy</run_depend>
   <run_depend>std_msgs</run_depend>
   <run_depend>control_msgs</run_depend>
-  <!-- scikit-robot is installed by pip: pip install scikit-robot -->
+  <!-- scikit-robot is installed into the package virtualenv by catkin_virtualenv (requirements.in) -->
 
   <test_depend>rostest</test_depend>
 
@@ -47,6 +48,7 @@
     <aerial_robot_model plugin="${prefix}/plugins/robot_model_plugins.xml" />
     <aerial_robot_control plugin="${prefix}/plugins/control_plugins.xml" />
     <aerial_robot_control plugin="${prefix}/plugins/navigation_plugin.xml" />
+    <pip_requirements>requirements.txt</pip_requirements>
   </export>
 
 </package>

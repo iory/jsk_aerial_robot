@@ -56,3 +56,10 @@
     local-name: mocap_optitrack
     uri: https://github.com/sugikazu75/mocap_optitrack.git
     version: 50fb60d
+
+# catkin_virtualenv (uv branch)
+# installs python dependencies (scikit-robot for gimbalrotor) into a per-package virtualenv with uv
+- git:
+    local-name: catkin_virtualenv
+    uri: https://github.com/iory/catkin_virtualenv.git
+    version: 1c01ff5
