@@ -20,17 +20,17 @@
         <include file="$(find aerial_robot_base)/launch/external_module/mocap.launch" />
 
         <!-- livox mid360 & fast lio -->
-        <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360.launch" />
-        <include file="$(find fast_lio)/launch/mapping_mid360.launch" >
-          <arg name="rviz" value="false" />
-        </include>
+        <!-- <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360.launch" /> -->
+        <!-- <include file="$(find fast_lio)/launch/mapping_mid360.launch" > -->
+        <!--   <arg name="rviz" value="false" /> -->
+        <!-- </include> -->
 
         <!-- imu pipeline to use imu data of spinal for fast lio -->
-        <node pkg="imu_transformer" type="imu_transformer_node" name="imu_data_transformer" output="screen">
-          <remap from="imu_in/data" to="sensor_plugin/imu1/ros_converted"/>
-          <remap from="imu_out/data" to="livox/imu_spinal"/>
-          <param name="target_frame" value="$(arg robot_ns)/lidar_imu"/>
-        </node>
+        <!-- <node pkg="imu_transformer" type="imu_transformer_node" name="imu_data_transformer" output="screen"> -->
+        <!--   <remap from="imu_in/data" to="sensor_plugin/imu1/ros_converted"/> -->
+        <!--   <remap from="imu_out/data" to="livox/imu_spinal"/> -->
+        <!--   <param name="target_frame" value="$(arg robot_ns)/lidar_imu"/> -->
+        <!-- </node> -->
 
       </group>
     </group>
