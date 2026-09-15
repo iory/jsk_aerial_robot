@@ -40,6 +40,9 @@
   <run_depend>rospy</run_depend>
   <run_depend>std_msgs</run_depend>
   <run_depend>control_msgs</run_depend>
+  <run_depend>actionlib</run_depend>
+  <run_depend>std_srvs</run_depend>
+  <run_depend>trajectory_msgs</run_depend>
   <!-- scikit-robot is installed into the package virtualenv by catkin_virtualenv (requirements.in) -->
 
   <test_depend>rostest</test_depend>
