@@ -18,6 +18,8 @@ find_package(catkin REQUIRED COMPONENTS
 
 find_package(Eigen3 REQUIRED)
 
+catkin_python_setup()
+
 catkin_package(
   CATKIN_DEPENDS aerial_robot_control aerial_robot_estimation aerial_robot_model aerial_robot_msgs controller_manager hardware_interface pluginlib roscpp sensor_msgs spinal
 )
@@ -41,6 +43,11 @@ target_link_libraries(arm_hardware_interface_node ${catkin_LIBRARIES})
 
 install(TARGETS arm_hardware_interface_node
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+  )
+
+catkin_install_python(PROGRAMS
+  script/skrobot_go_and_return.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
   )
 
 install(DIRECTORY config plugins launch
