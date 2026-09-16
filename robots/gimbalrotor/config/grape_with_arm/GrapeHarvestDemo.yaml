@@ -49,6 +49,9 @@ detection:
   world_frame: world
   observe_time: 3.0        # [s] the boxes are collected for this long before the targets are picked
   min_observations: 3      # a bunch has to be seen in this many messages
+  # [s] the collection goes on past observe_time (and refine_time) until min_observations messages
+  # have come, for a slow detector; the boxes came at 1.3 Hz in gazebo while it was recorded
+  observe_timeout: 10.0
   cluster_radius: 0.12     # [m] boxes nearer than this to each other are the same bunch
   # the gripper pinches the stem, which is just above the top of the box of the berries
   stem_offset: 0.015       # [m]

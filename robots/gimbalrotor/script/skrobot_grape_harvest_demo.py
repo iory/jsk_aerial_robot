@@ -217,6 +217,8 @@ class GrapeHarvestDemo(object):
         """Return the bunches that the detector sees, in the field frame.
 
         The boxes of ``detection/topic`` are collected for ``observe_time``,
+        and longer if fewer than ``min_observations`` messages have come by
+        then (a slow detector), up to ``observe_timeout``. They are
         transformed into the field frame and grouped by distance; a group seen
         in at least ``min_observations`` messages is a bunch. Its grasp point
         is the middle of the top of its box (the gripper pinches the stem just
@@ -235,13 +237,19 @@ class GrapeHarvestDemo(object):
             rospy.loginfo('collecting the boxes of %s for %.1f s',
                           d['topic'], observe_time)
         groups = []  # the points of one bunch, seen in several messages
-        end = rospy.get_time() + observe_time
+        start = rospy.get_time()
+        end = start + observe_time
+        timeout = start + max(observe_time, d['observe_timeout'])
         messages = 0
-        while rospy.get_time() < end and not rospy.is_shutdown():
+        while not rospy.is_shutdown():
+            now = rospy.get_time()
+            if now >= timeout or (
+                    now >= end and messages >= d['min_observations']):
+                break
             try:
                 msg = rospy.wait_for_message(
                     d['topic'], BoundingBoxArray,
-                    timeout=max(0.1, end - rospy.get_time()))
+                    timeout=max(0.1, timeout - now))
             except rospy.ROSException:
                 break
             messages += 1
