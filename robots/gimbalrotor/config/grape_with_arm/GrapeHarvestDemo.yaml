@@ -74,13 +74,16 @@ motion:
   # of the flight (and of the odometry, when the target is re-detected from the camera) is taken out
   # by the arm instead of going into the grasp. The arm waits folded by arm_standoff, which leaves it
   # room to reach forward, back, sideways and up or down.
-  arm_reach: 0.05           # [m] gripper short of the stem when the body stops
-  arm_standoff: 0.08        # [m] the waiting pose is this much short of the fully stretched arm
-  # with these two the arm still reaches 0.14 m sideways, 0.08 m up and 0.03 m forward from the
-  # stem; a target further than max_arm_correction from the waiting pose is refused, and so is a
-  # pose that folds a joint further than max_arm_angle (the arm has no collision model)
-  max_arm_correction: 0.12  # [m]
-  max_arm_angle: 2.0        # [rad]
+  arm_reach: 0.08           # [m] gripper short of the stem when the body stops
+  arm_standoff: 0.12        # [m] the waiting pose is this much short of the fully stretched arm
+  # With these two the arm waits with joint2 at -127 deg and reaches 0.16 m sideways, 0.10 m up and
+  # down and 0.04 m forward from the stem. The meshes of the arm stay 2.8 cm apart at the waiting pose
+  # (joint3 from the pipe); folding further closes that quickly: 1.2 cm at arm_standoff 0.14
+  # (-144 deg), and the links touch from about -160 deg. A target further than max_arm_correction
+  # from the waiting pose is refused, and so is a pose that folds a joint further than max_arm_angle,
+  # since the demo has no collision model of the arm.
+  max_arm_correction: 0.14  # [m]
+  max_arm_angle: 2.35       # [rad] 135 deg
   # the servos do not land exactly on the angles they are given, so the gripper is measured from
   # the joint angles after the motion and the arm is sent again, up to max_arm_tries times
   max_arm_tries: 3
