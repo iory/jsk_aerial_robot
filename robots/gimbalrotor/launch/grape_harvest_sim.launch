@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<!-- grape_with_arm in a vineyard in gazebo, for script/skrobot_grape_harvest_demo.py -->
+<launch>
+  <arg name="headless" default="False" />
+  <arg name="world" default="$(find gimbalrotor)/worlds/grape_vineyard.world" />
+  <!-- the field frame of config/grape_with_arm/GrapeHarvestDemo.yaml is the world frame when the robot spawns at the origin -->
+  <arg name="spawn_x" default="0.0" />
+  <arg name="spawn_y" default="0.0" />
+  <arg name="spawn_yaw" default="0.0" />
+
+  <include file="$(find gimbalrotor)/launch/bringup.launch">
+    <arg name="real_machine" value="False" />
+    <arg name="simulation" value="True" />
+    <arg name="airframe" value="grape_with_arm" />
+    <arg name="headless" value="$(arg headless)" />
+    <arg name="worldtype" value="$(arg world)" />
+    <arg name="spawn_x" value="$(arg spawn_x)" />
+    <arg name="spawn_y" value="$(arg spawn_y)" />
+    <arg name="spawn_yaw" value="$(arg spawn_yaw)" />
+  </include>
+
+  <!-- stands in for the contact between the fingers and a stem, see the script -->
+  <node pkg="gimbalrotor" type="grape_harvest_sim_grasp.py" name="grape_harvest_sim_grasp" output="screen">
+    <param name="robot_ns" value="gimbalrotor" />
+  </node>
+</launch>

@@ -67,12 +67,15 @@ install(TARGETS arm_hardware_interface_node
 
 if(GIMBALROTOR_BUILD_SKROBOT_INTERFACE)
   catkin_install_python(PROGRAMS
+    script/grape_harvest_sim_grasp.py
+    script/make_grape_vineyard_world.py
     script/skrobot_go_and_return.py
+    script/skrobot_grape_harvest_demo.py
     DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
     )
 endif()
 
-install(DIRECTORY config plugins launch
+install(DIRECTORY config plugins launch models worlds
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
   USE_SOURCE_PERMISSIONS
   )

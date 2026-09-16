@@ -1,0 +1,77 @@
+# Grape harvest demo of grape_with_arm
+#
+# script/skrobot_grape_harvest_demo.py reads this file to fly to the bunches and the crate,
+# and script/make_grape_vineyard_world.py generates the gazebo world (worlds/grape_vineyard.world) from it.
+#
+# All positions are in the field frame [m]:
+#   origin : on the ground right below the robot (main_body) where it stands before takeoff
+#   x      : the heading of the robot before takeoff
+#   z      : up
+# In gazebo the robot spawns at the origin of the world with yaw 0, so the field frame is the world frame.
+# For the real machine, measure the bunches and the crate from where the robot is placed.
+
+field:
+  # grape bunches to harvest, visited in this order
+  bunches:
+    - name: kyoho_black
+      # the point on the stem that the gripper pinches
+      stem: [2.0, 0.0, 1.10]
+    - name: red_globe
+      stem: [2.0, 0.55, 1.15]
+    - name: green_thompson
+      stem: [2.0, -0.55, 1.05]
+
+  # crates on the ground; the bunches are dropped into drop_crate
+  crates:
+    - position: [0.9, -1.4, 0.0]   # center of the bottom
+      yaw: 0.0
+    - position: [0.1, -2.0, 0.0]
+      yaw: 0.3
+    - position: [0.1, -2.0, 0.3]   # stacked on the previous one
+      yaw: 0.3
+  drop_crate: 0
+  crate_size: [0.5, 0.5, 0.3]      # outer size [x, y, height]
+
+  # rows of vines (gazebo world only)
+  # the canopy of a row is about 0.9 m thick and 2.2 m high, and the row extends 6.5 m along its axis
+  vine_rows:
+    - {center: [2.6, -3.2], yaw: 1.5708}
+    - {center: [2.6, 3.2], yaw: 1.5708}
+    - {center: [5.4, -3.2], yaw: 1.5708}
+    - {center: [5.4, 3.2], yaw: 1.5708}
+    - {center: [-2.8, -3.2], yaw: 1.5708}
+    - {center: [-2.8, 3.2], yaw: 1.5708}
+
+motion:
+  # the gripper approaches a stem horizontally along the heading of the robot
+  approach_distance: 0.35   # distance in front of the stem where the approach starts
+  retreat_distance: 0.5     # distance to back off after grasping
+  lift_height: 0.05         # height to lift the bunch while backing off
+  # the gripper is lowered to release_height above the crate bottom from release_height + crate_clearance
+  release_height: 0.5
+  crate_clearance: 0.3
+  # arm joint angles [rad]; joints not listed are 0
+  grasp_arm_pose: {}
+  release_arm_pose: {arm_joint4_joint1: 0.5}
+  arm_time: 2.0             # duration of an arm motion [s]
+  gripper_time: 1.5         # duration of a gripper motion [s]
+  gripper_width_tolerance: 0.003  # opening shorter than fully open by more than this is a failure [m]
+  hold_time: 1.0            # wait after a grasp or a release [s]
+  # convergence of flight motions (CoG position [m], velocity [m/s], yaw [rad])
+  # coarse: motions in free space
+  coarse_pos_thresh: 0.10
+  coarse_vel_thresh: 0.05
+  coarse_yaw_thresh: 0.05
+  # fine: lining up with a stem, grasping and releasing over the crate
+  # (a yaw error of 0.05 rad already moves the gripper 3.6 cm sideways at the end of the arm)
+  fine_pos_thresh: 0.02
+  fine_vel_thresh: 0.02
+  fine_yaw_thresh: 0.03
+  # after a fine motion, the gripper error measured with the odometry and the joint angles must stay
+  # within gripper_tolerance for settle_time; a steady error moves the CoG target (max_corrections),
+  # and the demo stops if the gripper does not settle within max_settle_windows
+  gripper_tolerance: 0.015  # [m]
+  settle_time: 1.0          # [s]
+  max_settle_windows: 20
+  max_corrections: 5
+  flight_timeout: 40.0      # [s]

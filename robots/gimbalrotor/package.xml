@@ -28,6 +28,8 @@
   <run_depend>aerial_robot_msgs</run_depend>
   <run_depend>aerial_robot_simulation</run_depend>
   <run_depend>aerial_robot_base</run_depend>
+  <run_depend>gazebo_msgs</run_depend>
+  <run_depend>gazebo_ros</run_depend>
   <run_depend>spinal</run_depend>
   <run_depend>roscpp</run_depend>
   <run_depend>pluginlib</run_depend>
@@ -52,6 +54,7 @@
     <aerial_robot_control plugin="${prefix}/plugins/control_plugins.xml" />
     <aerial_robot_control plugin="${prefix}/plugins/navigation_plugin.xml" />
     <pip_requirements>requirements.txt</pip_requirements>
+    <gazebo_ros gazebo_model_path="${prefix}/models" />
   </export>
 
 </package>
