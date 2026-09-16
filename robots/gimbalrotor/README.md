@@ -75,6 +75,29 @@ roslaunch gimbalrotor_remote remote_rviz.launch
 rosrun gimbalrotor_remote remote_rviz.sh <robot host>
 ```
 
+## sensors of grape_with_arm (onboard PC)
+
+The onboard PC reaches the LiDAR over `eth0` and the depth camera over USB.
+
+| sensor | address / bus | driver | topics |
+| --- | --- | --- | --- |
+| Livox MID360 | `192.168.2.141`, host `192.168.2.50/24` on `eth0` | `roslaunch livox_ros_driver2 msg_MID360.launch` (commented out in `launch/include/sensors.launch.xml`) | `/livox/lidar` 10 Hz, `/livox/imu` 200 Hz |
+| Intel RealSense D435 | USB | `launch/include/sensors.launch.xml` of `bringup.launch`, `camera:=false` to skip it | `<robot_ns>/camera/color/image_raw`, `.../camera/depth/image_rect_raw`; gazebo publishes the same topics |
+
+- The addresses of the LiDAR and of the host must match `livox_ros_driver2/config/MID360_config.json`.
+  Without them the driver still receives the points but drops them with
+  `Storage point data failed, can not get index` and publishes nothing.
+- `eth0` is a static address in NetworkManager (it carries no DHCP server):
+  ```bash
+  sudo nmcli con mod "Wired connection 1" ipv4.method manual ipv4.addresses 192.168.2.50/24 \
+      ipv4.gateway "" ipv6.method ignore
+  sudo nmcli con up "Wired connection 1"
+  ```
+- A replaced LiDAR keeps its own address, which is not the one in the config. Write the address of the config
+  into it with [livox-ip-tool](https://github.com/iory/livox-ip-tool) rather than editing the config.
+- `Mipi device capability could not be grabbed` in the RealSense log is harmless: it looks for MIPI cameras
+  and the D435 is on USB.
+
 ## arm
 
 The arm joints are `<robot_ns>/arm/arm_controller` (`position_controllers/JointTrajectoryController` through
