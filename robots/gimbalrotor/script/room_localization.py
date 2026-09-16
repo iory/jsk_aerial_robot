@@ -26,6 +26,17 @@ Parameters
     Cloud of the current run in ``~odom_frame`` (default: /cloud_registered of fast_lio).
 ~map_frame : str, ~odom_frame : str
     Frames of the transform (default: map and camera_init).
+~world_frame : str
+    Frame of the state estimation. When ``~robot_odom`` and ``~lio_odom`` are both received, the
+    transform ``~map_frame -> ~world_frame`` is published as well, which is what a flight target given
+    in map coordinates is converted with (default: world; empty to skip it).
+~robot_odom : str
+    Odometry of the state estimation, in ``~world_frame`` (default: uav/baselink/odom of the robot).
+~lio_odom : str
+    Odometry of the lidar odometry, in ``~odom_frame`` (default: /Odometry of fast_lio).
+~lidar_frame : str
+    Frame of the robot model the lidar odometry describes, i.e. the body frame of fast_lio
+    (default: <robot_ns>/lidar_imu).
 ~duration : float
     Cloud is collected for this long before the match [s] (default: 5.0).
 ~yaw_hint : float
@@ -47,8 +58,10 @@ import threading
 
 import numpy as np
 import rospy
+import tf.transformations as tft
 import tf2_ros
 from geometry_msgs.msg import TransformStamped
+from nav_msgs.msg import Odometry
 from sensor_msgs.msg import PointCloud2
 from std_srvs.srv import Empty
 from std_srvs.srv import EmptyResponse
@@ -164,6 +177,20 @@ def align(map_xy, run_xy, bin_size, angle_step, yaw_hint):
     return shift, yaw, score
 
 
+def matrix_of_pose(position, orientation):
+    """4x4 matrix of a geometry_msgs pose or transform."""
+    matrix = tft.quaternion_matrix([orientation.x, orientation.y, orientation.z, orientation.w])
+    matrix[:3, 3] = [position.x, position.y, position.z]
+    return matrix
+
+
+def matrix_of_planar(shift, yaw):
+    matrix = tft.rotation_matrix(yaw, (0, 0, 1))
+    matrix[0, 3] = shift[0]
+    matrix[1, 3] = shift[1]
+    return matrix
+
+
 class RoomLocalization(object):
     def __init__(self):
         self.map_frame = rospy.get_param('~map_frame', 'map')
@@ -176,13 +203,57 @@ class RoomLocalization(object):
         self.map_xy = voxel_downsample(load_pcd_xyz(rospy.get_param('~map')), self.voxel)[:, :2]
         rospy.loginfo('[room localization] map: %d points after a %.2f m voxel', len(self.map_xy), self.voxel)
 
+        self.world_frame = rospy.get_param('~world_frame', 'world')
+        namespace = rospy.get_namespace().rstrip('/')
+        self.lidar_frame = rospy.get_param('~lidar_frame', namespace + '/lidar_imu')
+
         self.lock = threading.Lock()
         self.clouds = []
         self.collecting = False
+        self.robot_odom = None
+        self.lio_odom = None
         self.broadcaster = tf2_ros.StaticTransformBroadcaster()
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
         self.sub = rospy.Subscriber(rospy.get_param('~cloud', '/cloud_registered'), PointCloud2,
                                     self.cloud_callback, queue_size=5)
+        if self.world_frame:
+            rospy.Subscriber(rospy.get_param('~robot_odom', namespace + '/uav/baselink/odom'), Odometry,
+                             self.robot_odom_callback, queue_size=1)
+            rospy.Subscriber(rospy.get_param('~lio_odom', '/Odometry'), Odometry,
+                             self.lio_odom_callback, queue_size=1)
         rospy.Service('~relocalize', Empty, self.relocalize)
+
+    def robot_odom_callback(self, msg):
+        self.robot_odom = msg
+
+    def lio_odom_callback(self, msg):
+        self.lio_odom = msg
+
+    def world_transform(self, map_to_odom):
+        """The map frame in the world frame of the state estimation, or None.
+
+        The lidar odometry and the state estimation describe the same robot in their own frames, so
+        comparing the two poses of the moment gives the transform between the frames:
+        map -> world = (map -> odom) (odom -> lidar) (baselink -> lidar)^-1 (world -> baselink)^-1.
+        """
+        robot_odom, lio_odom = self.robot_odom, self.lio_odom
+        if robot_odom is None or lio_odom is None:
+            rospy.logwarn('[room localization] no %s or %s yet, publishing only %s -> %s',
+                          'robot odometry', 'lidar odometry', self.map_frame, self.odom_frame)
+            return None
+        try:
+            baselink_to_lidar = self.tf_buffer.lookup_transform(
+                robot_odom.child_frame_id, self.lidar_frame, rospy.Time(0), rospy.Duration(2.0)).transform
+        except tf2_ros.TransformException as e:
+            rospy.logwarn('[room localization] no transform %s -> %s (%s)',
+                          robot_odom.child_frame_id, self.lidar_frame, e)
+            return None
+        world_to_baselink = matrix_of_pose(robot_odom.pose.pose.position, robot_odom.pose.pose.orientation)
+        baselink_to_lidar = matrix_of_pose(baselink_to_lidar.translation, baselink_to_lidar.rotation)
+        odom_to_lidar = matrix_of_pose(lio_odom.pose.pose.position, lio_odom.pose.pose.orientation)
+        world_to_lidar = world_to_baselink.dot(baselink_to_lidar)
+        return map_to_odom.dot(odom_to_lidar).dot(np.linalg.inv(world_to_lidar))
 
     def cloud_callback(self, msg):
         with self.lock:
@@ -218,17 +289,34 @@ class RoomLocalization(object):
         rospy.loginfo('[room localization] %s -> %s: translation (%.3f, %.3f) m, rotation %.2f deg',
                       self.map_frame, self.odom_frame, shift[0], shift[1], np.degrees(yaw))
 
+        map_to_odom = matrix_of_planar(shift, yaw)
+        transforms = [self.transform_msg(self.odom_frame, map_to_odom)]
+        if self.world_frame:
+            map_to_world = self.world_transform(map_to_odom)
+            if map_to_world is not None:
+                translation = map_to_world[:3, 3]
+                world_yaw = np.arctan2(map_to_world[1, 0], map_to_world[0, 0])
+                rospy.loginfo('[room localization] %s -> %s: translation (%.3f, %.3f, %.3f) m, '
+                              'rotation %.2f deg', self.map_frame, self.world_frame, translation[0],
+                              translation[1], translation[2], np.degrees(world_yaw))
+                transforms.append(self.transform_msg(self.world_frame, map_to_world))
+        self.broadcaster.sendTransform(transforms)
+        return True
+
+    def transform_msg(self, child_frame, matrix):
+        quaternion = tft.quaternion_from_matrix(matrix)
         transform = TransformStamped()
         transform.header.stamp = rospy.Time.now()
         transform.header.frame_id = self.map_frame
-        transform.child_frame_id = self.odom_frame
-        transform.transform.translation.x = float(shift[0])
-        transform.transform.translation.y = float(shift[1])
-        transform.transform.translation.z = 0.0
-        transform.transform.rotation.z = float(np.sin(yaw / 2))
-        transform.transform.rotation.w = float(np.cos(yaw / 2))
-        self.broadcaster.sendTransform(transform)
-        return True
+        transform.child_frame_id = child_frame
+        transform.transform.translation.x = float(matrix[0, 3])
+        transform.transform.translation.y = float(matrix[1, 3])
+        transform.transform.translation.z = float(matrix[2, 3])
+        transform.transform.rotation.x = float(quaternion[0])
+        transform.transform.rotation.y = float(quaternion[1])
+        transform.transform.rotation.z = float(quaternion[2])
+        transform.transform.rotation.w = float(quaternion[3])
+        return transform
 
     def relocalize(self, _):
         self.localize()

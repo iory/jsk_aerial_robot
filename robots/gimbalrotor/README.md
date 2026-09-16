@@ -94,7 +94,10 @@ The onboard PC reaches the LiDAR over Ethernet and the depth camera over USB.
 
 fast_lio starts its world at the pose where it was switched on, so a place has different coordinates on
 every run. `script/room_localization.py` matches the cloud of the run against a map recorded once and
-publishes `map -> camera_init`, after which a place keeps its coordinates.
+publishes `map -> camera_init`, after which a place keeps its coordinates. It also publishes
+`map -> world`, the frame the flight targets are in: the lidar odometry and the state estimation describe
+the same robot, so comparing their two poses of the moment gives the transform between their frames
+(`~world_frame:=''` skips it).
 
 ```bash
 # record the map once, with pcd_save/pcd_save_en of fast_lio on (writes <fast_lio>/PCD/scans.pcd)
