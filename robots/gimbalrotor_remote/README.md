@@ -30,7 +30,7 @@ roslaunch gimbalrotor_remote remote_rviz.launch
 On an operator PC connected to the ROS master of the robot:
 
 ```bash
-rosrun gimbalrotor_remote remote_rviz.sh <robot host>   # e.g. 192.168.97.101
+rosrun gimbalrotor_remote remote_rviz.sh <robot host>
 ```
 
 `remote_rviz.sh` resolves the robot address, exports `ROS_MASTER_URI` and `ROS_IP` (the source address of
