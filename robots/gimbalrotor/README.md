@@ -117,6 +117,12 @@ Carrying the robot once around the room gives a map with all the walls in it. Me
 with such a map, two runs put the same standing robot within 0.02 m and 1.3 deg of each other, and within
 0.08 m and 2.9 deg of where the map says it is.
 
+The map frame is level even though the lidar of grape_with_arm is mounted upside down: the roll and pitch of
+the lidar in the robot model (`~base_frame` -> `~lidar_frame`) are taken off the recorded map and the run
+cloud, and `map -> camera_init` carries them (roll 180 deg here). Its origin is where the lidar was when the
+map was recorded, so the floor is below z = 0. This assumes the robot stands level when fast_lio starts, and
+needs the robot model (robot_description and its tf) to be running.
+
 When the match is wrong, or the room is too symmetric to decide, point at the robot in rviz as in a 2D
 localization: `config/room.rviz` of gimbalrotor_remote shows the map (`~map_cloud` of the node) and has the
 "2D Pose Estimate" tool, and the pose it publishes starts a new match that keeps the turn closest to it and

@@ -35,13 +35,23 @@ Parameters
     Frame of the state estimation. When ``~robot_odom`` and ``~lio_odom`` are both received, the
     transform ``~map_frame -> ~world_frame`` is published as well, which is what a flight target given
     in map coordinates is converted with (default: world; empty to skip it).
+~robot_ns : str
+    Namespace of the robot, which names its frames (default: the namespace of the node, or gimbalrotor).
 ~robot_odom : str
-    Odometry of the state estimation, in ``~world_frame`` (default: uav/baselink/odom of the robot).
+    Odometry of the state estimation, in ``~world_frame`` (default: /<robot_ns>/uav/baselink/odom).
 ~lio_odom : str
     Odometry of the lidar odometry, in ``~odom_frame`` (default: /Odometry of fast_lio).
 ~lidar_frame : str
     Frame of the robot model the lidar odometry describes, i.e. the body frame of fast_lio
     (default: <robot_ns>/lidar_imu).
+~base_frame : str
+    Frame of the robot model that is level when the robot stands on the ground (default: <robot_ns>/root).
+    fast_lio starts its frame at the pose of the lidar, so a lidar mounted upside down or tilted gives an
+    upside down or tilted ``camera_init``, and so a map recorded in it. The roll and pitch of the lidar in
+    this frame are taken off both clouds before the match, the map frame is level, and the published
+    ``map -> camera_init`` carries that tilt. This assumes the robot stands level when fast_lio starts.
+~mount_roll, ~mount_pitch : float
+    Roll and pitch of the lidar in ``~base_frame`` [deg], used instead of the robot model when set.
 ~duration : float
     Cloud is collected for this long before the match [s] (default: 5.0).
 ~yaw_hint : float
@@ -333,6 +343,11 @@ def planar_of(matrix):
     return matrix[:2, 3].copy(), float(np.arctan2(matrix[1, 0], matrix[0, 0]))
 
 
+def level_rotation(roll, pitch):
+    """Rotation that takes the frame of a lidar with this roll and pitch to a level frame."""
+    return tft.euler_matrix(roll, pitch, 0.0, 'sxyz')
+
+
 def matrix_of_planar(shift, yaw):
     matrix = tft.rotation_matrix(yaw, (0, 0, 1))
     matrix[0, 3] = shift[0]
@@ -353,13 +368,12 @@ class RoomLocalization(object):
         self.overlap_cell = rospy.get_param('~overlap_cell', 0.1)
         self.tie = rospy.get_param('~tie', 0.01)
         self.prior_window = rospy.get_param('~prior_window', 3.0)
-        self.map_xyz = voxel_downsample(load_pcd_xyz(rospy.get_param('~map')), self.voxel)
-        self.map_xy = self.map_xyz[:, :2]
-        rospy.loginfo('[room localization] map: %d points after a %.2f m voxel', len(self.map_xy), self.voxel)
 
         self.world_frame = rospy.get_param('~world_frame', 'world')
-        namespace = rospy.get_namespace().rstrip('/')
-        self.lidar_frame = rospy.get_param('~lidar_frame', namespace + '/lidar_imu')
+        # tf frames have no leading slash; the node may run in the namespace of the robot or outside it
+        robot_ns = rospy.get_param('~robot_ns', rospy.get_namespace().strip('/') or 'gimbalrotor')
+        self.lidar_frame = rospy.get_param('~lidar_frame', robot_ns + '/lidar_imu')
+        self.base_frame = rospy.get_param('~base_frame', robot_ns + '/root')
 
         self.lock = threading.Lock()
         self.clouds = []
@@ -369,10 +383,17 @@ class RoomLocalization(object):
         self.broadcaster = tf2_ros.StaticTransformBroadcaster()
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
+
+        self.level = self.mount_level()
+        raw = load_pcd_xyz(rospy.get_param('~map'))
+        self.map_xyz = voxel_downsample(self.to_level(raw), self.voxel)
+        self.map_xy = self.map_xyz[:, :2]
+        rospy.loginfo('[room localization] map: %d points after a %.2f m voxel, height %.2f .. %.2f m',
+                      len(self.map_xy), self.voxel, self.map_xyz[:, 2].min(), self.map_xyz[:, 2].max())
         self.sub = rospy.Subscriber(rospy.get_param('~cloud', '/cloud_registered'), PointCloud2,
                                     self.cloud_callback, queue_size=5)
         if self.world_frame:
-            rospy.Subscriber(rospy.get_param('~robot_odom', namespace + '/uav/baselink/odom'), Odometry,
+            rospy.Subscriber(rospy.get_param('~robot_odom', '/' + robot_ns + '/uav/baselink/odom'), Odometry,
                              self.robot_odom_callback, queue_size=1)
             rospy.Subscriber(rospy.get_param('~lio_odom', '/Odometry'), Odometry,
                              self.lio_odom_callback, queue_size=1)
@@ -384,6 +405,33 @@ class RoomLocalization(object):
             self.map_pub = rospy.Publisher(map_cloud_topic, PointCloud2, queue_size=1, latch=True)
             self.map_pub.publish(self.map_cloud_msg())
         rospy.Service('~relocalize', Empty, self.relocalize)
+
+    def mount_level(self):
+        """The 4x4 rotation that takes camera_init (the lidar at start) to a level frame."""
+        if rospy.has_param('~mount_roll') or rospy.has_param('~mount_pitch'):
+            roll = np.radians(rospy.get_param('~mount_roll', 0.0))
+            pitch = np.radians(rospy.get_param('~mount_pitch', 0.0))
+            source = 'parameters'
+        else:
+            try:
+                transform = self.tf_buffer.lookup_transform(
+                    self.base_frame, self.lidar_frame, rospy.Time(0), rospy.Duration(10.0)).transform
+            except tf2_ros.TransformException as e:
+                rospy.logerr('[room localization] no transform %s -> %s, so the clouds are taken as level; '
+                             'start the robot model or set ~mount_roll and ~mount_pitch (%s)',
+                             self.base_frame, self.lidar_frame, e)
+                return np.eye(4)
+            rotation_ = transform.rotation
+            roll, pitch, _ = tft.euler_from_quaternion(
+                [rotation_.x, rotation_.y, rotation_.z, rotation_.w], 'sxyz')
+            source = '%s -> %s' % (self.base_frame, self.lidar_frame)
+        rospy.loginfo('[room localization] lidar mount from %s: roll %.1f deg, pitch %.1f deg',
+                      source, np.degrees(roll), np.degrees(pitch))
+        return level_rotation(roll, pitch)
+
+    def to_level(self, xyz):
+        """Points of camera_init in the level frame."""
+        return xyz.dot(self.level[:3, :3].T)
 
     def map_cloud_msg(self):
         """The map as a PointCloud2 in the map frame, so that rviz can show where to put the robot."""
@@ -473,25 +521,26 @@ class RoomLocalization(object):
             rospy.logwarn('[room localization] no lidar odometry yet, using the pose as the prior directly')
             return map_to_robot
         odom_to_robot = matrix_of_pose(lio_odom.pose.pose.position, lio_odom.pose.pose.orientation)
-        robot_to_lidar = self.robot_to_lidar()
+        robot_to_lidar = self.robot_to_lidar(self.base_frame)
         if robot_to_lidar is not None:
             odom_to_robot = odom_to_robot.dot(np.linalg.inv(robot_to_lidar))
-        shift, yaw = planar_of(odom_to_robot)
+        # in the level frame the robot stands level, so its x axis is its heading
+        shift, yaw = planar_of(self.level.dot(odom_to_robot))
         map_to_odom = matrix_of_planar(map_to_robot[0], map_to_robot[1]).dot(
             np.linalg.inv(matrix_of_planar(shift, yaw)))
         return planar_of(map_to_odom)
 
-    def robot_to_lidar(self):
-        """The lidar in the frame the robot odometry uses, from the robot model, or None."""
-        robot_odom = self.robot_odom
-        if robot_odom is None:
-            return None
+    def robot_to_lidar(self, frame=None):
+        """The lidar in a frame of the robot model (default: that of the robot odometry), or None."""
+        if frame is None:
+            if self.robot_odom is None:
+                return None
+            frame = self.robot_odom.child_frame_id
         try:
             transform = self.tf_buffer.lookup_transform(
-                robot_odom.child_frame_id, self.lidar_frame, rospy.Time(0), rospy.Duration(2.0)).transform
+                frame, self.lidar_frame, rospy.Time(0), rospy.Duration(2.0)).transform
         except tf2_ros.TransformException as e:
-            rospy.logwarn('[room localization] no transform %s -> %s (%s)',
-                          robot_odom.child_frame_id, self.lidar_frame, e)
+            rospy.logwarn('[room localization] no transform %s -> %s (%s)', frame, self.lidar_frame, e)
             return None
         return matrix_of_pose(transform.translation, transform.rotation)
 
@@ -500,7 +549,7 @@ class RoomLocalization(object):
         xyz = self.collect()
         if xyz is None:
             return False
-        run_xy = voxel_downsample(xyz, self.voxel)[:, :2]
+        run_xy = voxel_downsample(self.to_level(xyz), self.voxel)[:, :2]
         if len(run_xy) < 500:
             rospy.logerr('[room localization] only %d points in the run cloud', len(run_xy))
             return False
@@ -513,7 +562,8 @@ class RoomLocalization(object):
         rospy.loginfo('[room localization] %s -> %s: translation (%.3f, %.3f) m, rotation %.2f deg',
                       self.map_frame, self.odom_frame, shift[0], shift[1], np.degrees(yaw))
 
-        map_to_odom = matrix_of_planar(shift, yaw)
+        # the match is between level frames; camera_init keeps the tilt of the lidar
+        map_to_odom = matrix_of_planar(shift, yaw).dot(self.level)
         transforms = [self.transform_msg(self.odom_frame, map_to_odom)]
         if self.world_frame:
             map_to_world = self.world_transform(map_to_odom)
