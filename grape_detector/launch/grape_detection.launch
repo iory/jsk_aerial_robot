@@ -13,7 +13,7 @@
   <arg name="device" default="cuda:0" />
   <arg name="model" default="yolov8x-worldv2.pt" />
   <!-- seconds between two detections; 0 runs on every image -->
-  <arg name="min_interval" default="0.0" />
+  <arg name="min_interval" default="0.2" />
   <arg name="config" default="$(find grape_detector)/config/GrapeDetector.yaml" />
 
   <node pkg="nodelet" type="nodelet" name="$(arg manager)" args="manager" output="screen" />

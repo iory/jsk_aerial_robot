@@ -43,12 +43,26 @@ def image_to_numpy(msg):
     return np.ascontiguousarray(image)
 
 
-def numpy_to_image(image, header):
-    """Return a sensor_msgs/Image (bgr8) of an (H, W, 3) BGR array."""
+def numpy_to_image(image, header, encoding='bgr8'):
+    """Return a sensor_msgs/Image of an (H, W, 3) BGR array.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        ``(H, W, 3)`` BGR image.
+    header : std_msgs.msg.Header
+        Header of the message.
+    encoding : str
+        ``'bgr8'`` or ``'rgb8'``; the channels are swapped for ``'rgb8'``.
+    """
+    if encoding not in ('rgb8', 'bgr8'):
+        raise ValueError('unsupported image encoding {}'.format(encoding))
+    if encoding == 'rgb8':
+        image = image[:, :, ::-1]
     msg = Image()
     msg.header = header
     msg.height, msg.width = image.shape[:2]
-    msg.encoding = 'bgr8'
+    msg.encoding = encoding
     msg.is_bigendian = 0
     msg.step = 3 * msg.width
     msg.data = np.ascontiguousarray(image, dtype=np.uint8).tobytes()
@@ -162,8 +176,8 @@ class GrapeDetector(object):
         self.pub_class.publish(classification)
         self.pub_indices.publish(cluster_indices)
         if self.pub_image.get_num_connections() > 0:
-            self.pub_image.publish(
-                numpy_to_image(result.plot(), image_msg.header))
+            self.pub_image.publish(numpy_to_image(
+                result.plot(), image_msg.header, image_msg.encoding))
 
     def box_indices(self, depth, x1, y1, x2, y2, width):
         """Return the indices of the points of a bunch inside a box.

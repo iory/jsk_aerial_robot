@@ -26,6 +26,18 @@
     </plugin>
   </gazebo>
 
+  <!-- The feet of main_body: without contact parameters the robot creeps over the ground while it
+       stands there (the arm servos jitter and the contact bounces), which moves the field frame of
+       the demo away from the world. Stiff contact with no bounce keeps it where it is put. -->
+  <gazebo reference="main_body">
+    <mu1>1.0</mu1>
+    <mu2>1.0</mu2>
+    <kp>1000000.0</kp>
+    <kd>100.0</kd>
+    <maxVel>0.0</maxVel>
+    <minDepth>0.001</minDepth>
+  </gazebo>
+
   <!-- realsense d435: the same topics and frames as realsense2_camera on the real machine,
        <robot_ns>/camera/color/image_raw and <robot_ns>/camera_color_optical_frame.
        The image is an ideal pinhole camera: no lens distortion, no depth noise, and the
