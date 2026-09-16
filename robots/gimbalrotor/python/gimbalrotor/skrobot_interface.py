@@ -222,6 +222,79 @@ def find_gripper_open_sign(robot, gripper):
     return 1.0 if (gripper.slope > 0) == opens_with_angle else -1.0
 
 
+def find_gripper_model(urdf, joint_names, gripper_joint_name=None):
+    """Find the gripper drive joint among the joints of a controller.
+
+    Parameters
+    ----------
+    urdf : str
+        URDF string.
+    joint_names : list of str
+        Joints of the controller.
+    gripper_joint_name : str or None
+        Drive joint. If None, the joint whose prismatic mimic joints are the
+        fingers in the URDF.
+
+    Returns
+    -------
+    GripperMimicModel
+        Gripper model with ``open_sign`` 1.0; see ``find_gripper_open_sign``.
+    """
+    if gripper_joint_name is not None:
+        if gripper_joint_name not in joint_names:
+            raise RuntimeError(
+                '{} is not a joint of the controller {}'.format(
+                    gripper_joint_name, joint_names))
+        return GripperMimicModel(urdf, gripper_joint_name)
+    models = []
+    for name in joint_names:
+        try:
+            models.append(GripperMimicModel(urdf, name))
+        except RuntimeError:
+            continue
+    if len(models) != 1:
+        raise RuntimeError(
+            'expected one gripper drive joint in {}, found {}'.format(
+                joint_names, [m.drive_joint_name for m in models]))
+    return models[0]
+
+
+def gripper_center(robot, gripper):
+    """Return the center of the finger pads in the world frame.
+
+    The center of the bounding box of the finger visual meshes, which is the
+    point where an object is held between the fingers. It does not depend on
+    the opening, since the fingers move symmetrically.
+
+    Parameters
+    ----------
+    robot : skrobot.model.RobotModel
+        Robot model with the visual meshes of the finger links.
+    gripper : GripperMimicModel
+        Gripper of ``robot``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Position [m].
+    """
+    vertices = []
+    for link_name in gripper.finger_link_names:
+        link = getattr(robot, link_name)
+        meshes = link.visual_mesh
+        if not isinstance(meshes, list):
+            meshes = [meshes]
+        for mesh in meshes:
+            if mesh is not None:
+                vertices.append(
+                    link.worldcoords().transform_vector(mesh.vertices))
+    if not vertices:
+        raise RuntimeError('finger links {} have no visual mesh'.format(
+            gripper.finger_link_names))
+    vertices = np.concatenate(vertices)
+    return 0.5 * (vertices.min(axis=0) + vertices.max(axis=0))
+
+
 class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
     """Robot interface for the flight, the arm and the gripper of gimbalrotor.
 
@@ -307,25 +380,8 @@ class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
         return self._flight
 
     def _gripper_model(self, urdf, gripper_joint_name):
-        joint_names = self.arm_controller['joint_names']
-        if gripper_joint_name is not None:
-            if gripper_joint_name not in joint_names:
-                raise RuntimeError(
-                    '{} is not a joint of arm_controller {}'.format(
-                        gripper_joint_name, joint_names))
-            return GripperMimicModel(urdf, gripper_joint_name)
-        models = []
-        for name in joint_names:
-            try:
-                models.append(GripperMimicModel(urdf, name))
-            except RuntimeError:
-                continue
-        if len(models) != 1:
-            raise RuntimeError(
-                'expected one gripper drive joint in arm_controller {}, '
-                'found {}'.format(joint_names,
-                                  [m.drive_joint_name for m in models]))
-        return models[0]
+        return find_gripper_model(
+            urdf, self.arm_controller['joint_names'], gripper_joint_name)
 
     @staticmethod
     def _baselink_name(urdf):
@@ -388,7 +444,12 @@ class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
                 .transform(baselink.copy_worldcoords())
             world_to_root = self.baselink_coords().transform(
                 root_to_baselink.inverse_transformation())
-            self.robot.newcoords(world_to_root)
+            # the new root pose is computed from the previous one, so the
+            # rounding error of the rotation accumulates over the updates
+            # until skrobot rejects it (determinant != 1); orthonormalize it
+            u, _, vt = np.linalg.svd(world_to_root.worldrot())
+            self.robot.newcoords(Coordinates(pos=world_to_root.worldpos(),
+                                             rot=u.dot(vt)))
         return ret
 
     # ---------------------------------------------------------------------
