@@ -3,6 +3,29 @@
 Multirotor whose rotors are tilted by gimbal servos. The `grape_with_arm` airframe carries a 5-DoF arm
 with a gripper, controlled through `FollowJointTrajectory`.
 
+## TL;DR
+
+```bash
+source ~/ros/grape/devel/setup.bash
+
+# simulation, one terminal each
+roslaunch gimbalrotor bringup.launch simulation:=True real_machine:=False airframe:=grape_with_arm
+QT_QPA_PLATFORM=xcb roslaunch gimbalrotor_remote remote_rviz.launch   # rviz with the arm and teleop panels
+
+# grape harvest demo instead of the empty world
+roslaunch gimbalrotor grape_harvest_sim.launch headless:=True
+rosrun gimbalrotor skrobot_grape_harvest_demo.py --bunches 0 -y
+
+# rviz on an operator PC connected to the robot
+rosrun gimbalrotor_remote remote_rviz.sh <robot host>
+```
+
+- `headless:=False` shows the gazebo GUI; under Wayland prefix it with `QT_QPA_PLATFORM=xcb`.
+- After `Ctrl-C`, wait until gzserver is gone (`pgrep -fc gzserver` is 0) before launching again; a leftover
+  one makes the next gazebo exit immediately.
+- Run your own scikit-robot scripts with `rosrun gimbalrotor <script>` or
+  `devel/share/gimbalrotor/venv/bin/python`.
+
 ## bringup
 
 ### simulation (gazebo)

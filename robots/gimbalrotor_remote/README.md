@@ -3,6 +3,22 @@
 rviz panels to operate [gimbalrotor](../gimbalrotor/README.md) from an operator PC: the arm (servo torque
 and joint targets) and the basic flight teleoperation.
 
+## TL;DR
+
+```bash
+source ~/ros/grape/devel/setup.bash
+
+# same PC as the robot or the simulation (prefix with QT_QPA_PLATFORM=xcb under Wayland)
+roslaunch gimbalrotor_remote remote_rviz.launch
+
+# operator PC connected to the robot: sets ROS_MASTER_URI / ROS_IP, then launches the same file
+rosrun gimbalrotor_remote remote_rviz.sh <robot host>
+```
+
+`ArmControlPanel` turns the servo torque of each arm joint on and off and moves the joints in degrees;
+`FlightTeleopPanel` arms, takes off, lands, halts and moves the robot while a direction button is held.
+**On the real machine those flight buttons spin the propellers.**
+
 ## launch
 
 On the PC that also runs the robot or the simulation:
