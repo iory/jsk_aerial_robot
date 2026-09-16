@@ -504,11 +504,11 @@ class GrapeHarvestDemo(object):
                                           np.round(target, 3), limit))
         return pose
 
-    def reach_arm_pose(self, label, stem_world):
-        """Return the arm angles that put the gripper on a stem.
+    def stem_in_body(self, label, stem_world):
+        """Return a stem in the frame of the root link, from the measured pose.
 
-        The stem is taken into the frame of the root of the robot with the
-        measured pose, so that where the body actually is does not matter.
+        Where the body actually is does not matter for the arm, only where
+        the stem is relative to it.
 
         Parameters
         ----------
@@ -519,8 +519,8 @@ class GrapeHarvestDemo(object):
 
         Returns
         -------
-        dict
-            ``{joint name: angle [rad]}`` of the arm joints.
+        numpy.ndarray
+            ``(3,)`` stem in the root frame [m].
         """
         if not self.ri.update_robot_state(wait_until_update=True):
             raise DemoError('joint states are not received')
@@ -535,7 +535,43 @@ class GrapeHarvestDemo(object):
             raise DemoError(
                 '[{}] the stem is {:.3f} m off where the body was placed for, '
                 'more than max_arm_correction'.format(label, correction))
-        return self.arm_ik(target, seed=self.reach_pose)
+        return target
+
+    def reach_arm_pose(self, label, stem_world):
+        """Return the arm angles that put the gripper on a stem."""
+        return self.arm_ik(self.stem_in_body(label, stem_world),
+                           seed=self.reach_pose)
+
+    def approach_arm_path(self, label, stem_world):
+        """Return the arm poses that bring the gripper straight onto a stem.
+
+        Going straight from the folded arm to the stem, the fingers sweep
+        across it from the side. The first pose puts the open gripper
+        ``pre_reach_distance`` behind the stem, in line with it; the rest
+        move it forward along the body to the stem, so the stem only ever
+        enters the gripper from the front.
+
+        Parameters
+        ----------
+        label : str
+            Name of the motion for the log.
+        stem_world : numpy.ndarray
+            Stem in the world frame [m].
+
+        Returns
+        -------
+        list of dict
+            Arm poses, the one behind the stem first and the grasp last.
+        """
+        m = self.motion
+        target = self.stem_in_body(label, stem_world)
+        back = np.array([m['pre_reach_distance'], 0.0, 0.0])
+        poses = []
+        seed = self.reach_pose
+        for s in np.linspace(0.0, 1.0, m['reach_steps'] + 1):
+            seed = self.arm_ik(target - (1.0 - s) * back, seed=seed)
+            poses.append(seed)
+        return poses
 
     def hold_body(self, label, arm_pose):
         """Keep the body where it is while the arm moves to a pose.
@@ -577,9 +613,11 @@ class GrapeHarvestDemo(object):
         stem_world = np.asarray(stem_world, dtype=np.float64)
         tolerance = m['gripper_tolerance']
         aim = stem_world.copy()
-        pose = self.reach_arm_pose(label, aim)
-        self.hold_body(label, pose)
-        self.move_arm(label + ' reach', pose)
+        path = self.approach_arm_path(label, aim)
+        self.hold_body(label, path[0])
+        self.move_arm(label + ' behind the stem', path[0])
+        self.hold_body(label, path[-1])
+        self.move_arm_path(label + ' in', path[1:], m['reach_time'])
         tries = 1
         for _ in range(m['max_settle_windows']):
             errors = self.gripper_errors(stem_world, m['settle_time'])
@@ -762,6 +800,26 @@ class GrapeHarvestDemo(object):
             # joint angles, and stop the demo if they can not
             rospy.logwarn('[%s] arm motion: %s', label, result.error_string)
 
+    def move_arm_path(self, label, arm_poses, duration):
+        """Move the arm through poses, as one trajectory of ``duration`` [s]."""
+        ri = self.ri
+        if not ri.update_robot_state(wait_until_update=True):
+            raise DemoError('joint states are not received')
+        avs = []
+        for pose in arm_poses:
+            for name, angle in pose.items():
+                getattr(ri.robot, name).joint_angle(angle)
+            avs.append(ri.robot.angle_vector().copy())
+        rospy.loginfo('[%s] arm through %d poses to %s in %.1f s', label,
+                      len(avs), self.round_pose(arm_poses[-1]), duration)
+        ri.angle_vector_sequence(avs, [duration / len(avs)] * len(avs))
+        ri.wait_interpolation()
+        result = ri.controller_table['arm_controller'][0].get_result()
+        if result is None:
+            raise DemoError('[{}] no result of the arm motion'.format(label))
+        if result.error_code != 0:
+            rospy.logwarn('[%s] arm motion: %s', label, result.error_string)
+
     def measured_gripper_width(self):
         if not self.ri.update_robot_state(wait_until_update=True):
             raise DemoError('joint states are not received')
@@ -847,6 +905,10 @@ class GrapeHarvestDemo(object):
         stem = self.refine_stem(label, bunch['stem'])
         self.reach_with_arm(label, self.to_world(stem))
         self.close_gripper(label)
+        # pull the bunch straight out before folding the arm aside
+        pull = self.approach_arm_path(label, self.measured_tcp())
+        self.hold_body(label, pull[0])
+        self.move_arm_path(label + ' out', pull[-2::-1], m['reach_time'])
         self.hold_body(label, self.waiting_pose)
         self.move_arm(label + ' fold', self.waiting_pose)
         self.fly_tcp(label + ' retreat', waypoints['retreat'], **folded)

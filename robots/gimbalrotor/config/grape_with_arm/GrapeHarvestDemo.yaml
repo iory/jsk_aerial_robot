@@ -77,6 +77,12 @@ motion:
   # gripper keeps pointing forward. In this pose the arm is 3.0 cm from the body and the legs and
   # below the rotors. From it, the inverse kinematics of scikit-robot reaches the stem.
   waiting_arm_pose: {arm_joint1_joint1: 1.05, arm_joint2_joint1: -2.1, arm_joint3_joint1: 1.05}
+  # The open gripper first goes pre_reach_distance behind the stem, in line with it, and then straight
+  # forward onto it in reach_steps poses over reach_time. Going straight from the folded arm, the
+  # fingers would sweep across the stem from the side.
+  pre_reach_distance: 0.06  # [m] 0.08 folds joint2 past max_arm_angle
+  reach_steps: 8
+  reach_time: 2.0           # [s]
   # where the body is placed: the gripper on the stem is this much short of the stretched arm, which
   # leaves the arm room to reach 0.12 m sideways, 0.08 m up and down and 0.04 m forward
   arm_reach_margin: 0.05    # [m]
