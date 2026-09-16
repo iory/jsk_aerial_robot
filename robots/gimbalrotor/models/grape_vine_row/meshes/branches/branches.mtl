@@ -1,0 +1,7 @@
+newmtl branches
+Ks 0.05 0.05 0.05
+Ns 10
+d 1
+Ka 1 1 1
+Kd 1 1 1
+map_Kd branches.png

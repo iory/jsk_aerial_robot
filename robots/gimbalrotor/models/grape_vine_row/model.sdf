@@ -1,0 +1,64 @@
+<?xml version='1.0' encoding='utf-8'?>
+<sdf version="1.6">
+  <model name="grape_vine_row">
+    <static>true</static>
+    <link name="vine">
+      <visual name="pillar">
+        <geometry>
+          <mesh>
+            <uri>model://grape_vine_row/meshes/pillar/pillar.obj</uri>
+          </mesh>
+        </geometry>
+        <cast_shadows>false</cast_shadows>
+      </visual>
+      <visual name="grape">
+        <geometry>
+          <mesh>
+            <uri>model://grape_vine_row/meshes/grape/grape.obj</uri>
+          </mesh>
+        </geometry>
+        <cast_shadows>false</cast_shadows>
+      </visual>
+      <visual name="branches">
+        <geometry>
+          <mesh>
+            <uri>model://grape_vine_row/meshes/branches/branches.obj</uri>
+          </mesh>
+        </geometry>
+        <cast_shadows>false</cast_shadows>
+      </visual>
+      <visual name="leaves">
+        <geometry>
+          <mesh>
+            <uri>model://grape_vine_row/meshes/leaves/leaves.obj</uri>
+          </mesh>
+        </geometry>
+        <cast_shadows>false</cast_shadows>
+      </visual>
+      <visual name="wire_006135006">
+        <geometry>
+          <mesh>
+            <uri>model://grape_vine_row/meshes/wire_006135006/wire_006135006.obj</uri>
+          </mesh>
+        </geometry>
+        <cast_shadows>false</cast_shadows>
+      </visual>
+      <visual name="trunk">
+        <geometry>
+          <mesh>
+            <uri>model://grape_vine_row/meshes/trunk/trunk.obj</uri>
+          </mesh>
+        </geometry>
+        <cast_shadows>false</cast_shadows>
+      </visual>
+      <visual name="wire">
+        <geometry>
+          <mesh>
+            <uri>model://grape_vine_row/meshes/wire/wire.obj</uri>
+          </mesh>
+        </geometry>
+        <cast_shadows>false</cast_shadows>
+      </visual>
+    </link>
+  </model>
+</sdf>

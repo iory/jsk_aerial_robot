@@ -1,0 +1,42 @@
+<?xml version='1.0' encoding='utf-8'?>
+<sdf version="1.6">
+  <model name="grape_bunch_green_thompson">
+    <link name="bunch">
+      <gravity>false</gravity>
+      <inertial>
+        <pose>-0.000303978 -0.000209901 -0.117999 0 0 0</pose>
+        <mass>0.15</mass>
+        <inertia>
+          <ixx>0.000590714</ixx>
+          <iyy>0.000589551</iyy>
+          <izz>0.000270263</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="berries">
+        <pose>-0.000303978 -0.000209901 -0.117999 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.10375 0.104197 0.190788</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="berries">
+        <geometry>
+          <mesh>
+            <uri>model://grape_bunch_green_thompson/meshes/berries.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <visual name="stem">
+        <geometry>
+          <mesh>
+            <uri>model://grape_bunch_green_thompson/meshes/stem.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+  </model>
+</sdf>
