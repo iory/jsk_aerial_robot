@@ -76,8 +76,8 @@ Parameters
 ~prior_window : float
     How far the shift may be from the pose given that way [m] (default: 3.0).
 ~tie : float
-    Turns whose mean distance to the map is within this of the best one are taken as fitting equally
-    well, and then ``~yaw_hint`` decides [m] (default: 0.01).
+    Fits whose mean distance to the map is within this of the best one are taken as fitting equally
+    well, and then the given pose or ``~yaw_hint`` decides [m] (default: 0.004).
 
 Services
 --------
@@ -287,43 +287,65 @@ def refine(distance_map, run_xy, shift, yaw, passes=3):
     return shift, yaw, best
 
 
-def align(map_xy, run_xy, bin_size, angle_step, yaw_hint, max_points=40000, overlap_cell=0.1,
-          prior=None, prior_window=3.0, tie=0.01):
+def angle_difference(a, b):
+    return abs(float(np.arctan2(np.sin(a - b), np.cos(a - b))))
+
+
+def align(map_xy, run_xy, bin_size, angle_step, yaw_hint=0.0, max_points=40000, overlap_cell=0.1,
+          prior=None, prior_window=3.0, tie=0.004, map_yaw=None, distance_map=None):
     """Return (translation, yaw, score) that put the run cloud onto the map cloud.
 
     The wall directions give the rotation up to a multiple of 90 deg and the histograms give the shift;
-    which of the four turns is the right one is decided by how much of the run then lies on the map,
-    since the inside of a room is not symmetric even when its walls are.
+    each of the four turns is then walked to its best fit on the distance map of the map, and the one
+    that lies closest to the map wins.
+
+    A room seen from one spot often fits in more than one pose equally well (its walls repeat every
+    180 deg). Those ties are broken by the hint: the heading ``yaw_hint``, or with a ``prior``
+    ((x, y), yaw) the pose closest to it. With a prior the shift is also searched within
+    ``prior_window`` of it, so that a pose given by hand can pick a fit the whole room search would
+    not, but a prior far from any fit still ends at the best fit of the room.
+
+    ``map_yaw`` and ``distance_map`` depend only on the map and can be passed in to save their cost.
     """
-    map_yaw = wall_direction(map_xy, bin_size, angle_step, max_points)
+    if map_yaw is None:
+        map_yaw = wall_direction(map_xy, bin_size, angle_step, max_points)
+    if distance_map is None:
+        distance_map = DistanceMap(map_xy, overlap_cell)
     run_yaw = wall_direction(run_xy, bin_size, angle_step, max_points)
-    distance_map = DistanceMap(map_xy, overlap_cell)
-    candidates = []
-    turns = (0.0, np.pi / 2, np.pi, -np.pi / 2)
+
+    searches = [(extra, None) for extra in (0.0, np.pi / 2, np.pi, -np.pi / 2)]
     if prior is not None:
         yaw_hint = prior[1]
-        turns = min(turns, key=lambda extra: abs(float(np.arctan2(
-            np.sin(map_yaw - run_yaw - extra - prior[1]), np.cos(map_yaw - run_yaw - extra - prior[1]))))),
-    for extra in turns:
+        nearest = min((extra for extra, _ in searches),
+                      key=lambda extra: angle_difference(map_yaw - run_yaw - extra, prior[1]))
+        searches.append((nearest, prior[0]))
+
+    candidates = []
+    for extra, around in searches:
         yaw = float(np.arctan2(np.sin(map_yaw - run_yaw - extra), np.cos(map_yaw - run_yaw - extra)))
         rotated = run_xy.dot(rotation(yaw))
-        window = prior_window if prior is not None else None
+        window = None if around is None else prior_window
         shift_x, _ = best_shift(rotated[:, 0], map_xy[:, 0], bin_size,
-                                prior=None if prior is None else prior[0][0], window=window)
+                                prior=None if around is None else around[0], window=window)
         shift_y, _ = best_shift(rotated[:, 1], map_xy[:, 1], bin_size,
-                                prior=None if prior is None else prior[0][1], window=window)
-        shift = np.array([shift_x, shift_y])
-        shift, yaw, cost = refine(distance_map, run_xy, shift, yaw)
-        rospy.loginfo('[room localization] turn %6.1f deg: shift (%5.2f, %5.2f), mean distance %.3f m',
-                      np.degrees(yaw), shift[0], shift[1], cost)
+                                prior=None if around is None else around[1], window=window)
+        shift, yaw, cost = refine(distance_map, run_xy, np.array([shift_x, shift_y]), yaw)
+        rospy.loginfo('[room localization] turn %6.1f deg%s: shift (%5.2f, %5.2f), mean distance %.3f m',
+                      np.degrees(yaw), '' if around is None else ' near the given pose',
+                      shift[0], shift[1], cost)
         candidates.append((cost, yaw, shift))
 
-    # the turn that fits best, and among those that fit as well the one closest to the hint: a room in
-    # which the robot sees only its own corner fits in more than one pose, and then the hint decides
     lowest = min(cost for cost, _, _ in candidates)
     close = [c for c in candidates if c[0] <= lowest + max(0.2 * lowest, tie)]
-    cost, yaw, shift = min(close, key=lambda c: abs(float(np.arctan2(
-        np.sin(c[1] - yaw_hint), np.cos(c[1] - yaw_hint)))))
+
+    def distance_to_hint(candidate):
+        _, yaw, shift = candidate
+        score = angle_difference(yaw, yaw_hint) / np.radians(45.0)
+        if prior is not None:
+            score += float(np.linalg.norm(shift - prior[0])) / prior_window
+        return score
+
+    cost, yaw, shift = min(close, key=distance_to_hint)
     return shift, yaw, cost
 
 
@@ -366,7 +388,7 @@ class RoomLocalization(object):
         self.angle_step = rospy.get_param('~angle_step', 0.05)
         self.max_points = rospy.get_param('~max_points', 40000)
         self.overlap_cell = rospy.get_param('~overlap_cell', 0.1)
-        self.tie = rospy.get_param('~tie', 0.01)
+        self.tie = rospy.get_param('~tie', 0.004)
         self.prior_window = rospy.get_param('~prior_window', 3.0)
 
         self.world_frame = rospy.get_param('~world_frame', 'world')
@@ -377,7 +399,6 @@ class RoomLocalization(object):
 
         self.lock = threading.Lock()
         self.clouds = []
-        self.collecting = False
         self.robot_odom = None
         self.lio_odom = None
         self.broadcaster = tf2_ros.StaticTransformBroadcaster()
@@ -390,6 +411,10 @@ class RoomLocalization(object):
         self.map_xy = self.map_xyz[:, :2]
         rospy.loginfo('[room localization] map: %d points after a %.2f m voxel, height %.2f .. %.2f m',
                       len(self.map_xy), self.voxel, self.map_xyz[:, 2].min(), self.map_xyz[:, 2].max())
+        # what depends only on the map is computed once
+        self.map_yaw = wall_direction(self.map_xy, self.bin, self.angle_step, self.max_points)
+        self.distance_map = DistanceMap(self.map_xy, self.overlap_cell)
+        rospy.loginfo('[room localization] map walls at %.2f deg', np.degrees(self.map_yaw))
         self.sub = rospy.Subscriber(rospy.get_param('~cloud', '/cloud_registered'), PointCloud2,
                                     self.cloud_callback, queue_size=5)
         if self.world_frame:
@@ -461,7 +486,10 @@ class RoomLocalization(object):
         yaw = tft.euler_from_quaternion([orientation.x, orientation.y, orientation.z, orientation.w])[2]
         rospy.loginfo('[room localization] pose given: (%.2f, %.2f) m, %.1f deg in %s',
                       position.x, position.y, np.degrees(yaw), self.map_frame)
-        self.localize(map_to_robot=(np.array([position.x, position.y]), float(yaw)))
+        prior = self.prior_from_pose((np.array([position.x, position.y]), float(yaw)))
+        # put the robot where it was pointed at right away, then let the match move it to where it fits
+        self.publish(matrix_of_planar(prior[0], prior[1]).dot(self.level), 'the given pose')
+        self.localize(prior=prior)
 
     def robot_odom_callback(self, msg):
         self.robot_odom = msg
@@ -490,23 +518,29 @@ class RoomLocalization(object):
         return map_to_odom.dot(odom_to_lidar).dot(np.linalg.inv(world_to_lidar))
 
     def cloud_callback(self, msg):
+        """Keep the clouds of the last ~duration, so that a match can start at once."""
+        now = rospy.get_time()
+        xyz = cloud_to_xyz(msg)
         with self.lock:
-            if self.collecting:
-                self.clouds.append(cloud_to_xyz(msg))
+            self.clouds.append((now, xyz))
+            self.clouds = [(stamp, cloud) for stamp, cloud in self.clouds if now - stamp <= self.duration]
 
     def collect(self):
-        with self.lock:
-            self.clouds = []
-            self.collecting = True
-        rospy.loginfo('[room localization] collecting %s for %.1f s', self.sub.resolved_name, self.duration)
-        rospy.sleep(self.duration)
-        with self.lock:
-            self.collecting = False
-            clouds, self.clouds = self.clouds, []
+        """The clouds of the last ~duration, waiting only for what is missing."""
+        start = rospy.get_time()
+        while not rospy.is_shutdown():
+            with self.lock:
+                clouds = list(self.clouds)
+            span = clouds[-1][0] - clouds[0][0] if clouds else 0.0
+            if span >= 0.8 * self.duration:
+                break
+            if rospy.get_time() - start > self.duration + 5.0:
+                break
+            rospy.sleep(0.2)
         if not clouds:
             rospy.logerr('[room localization] no cloud on %s', self.sub.resolved_name)
             return None
-        return np.concatenate(clouds)
+        return np.concatenate([cloud for _, cloud in clouds])
 
     def prior_from_pose(self, map_to_robot):
         """Turn a pose of the robot in the map frame into a prior of the map -> odom transform.
@@ -544,8 +578,7 @@ class RoomLocalization(object):
             return None
         return matrix_of_pose(transform.translation, transform.rotation)
 
-    def localize(self, map_to_robot=None):
-        prior = None if map_to_robot is None else self.prior_from_pose(map_to_robot)
+    def localize(self, prior=None):
         xyz = self.collect()
         if xyz is None:
             return False
@@ -556,14 +589,18 @@ class RoomLocalization(object):
         start = rospy.Time.now()
         shift, yaw, score = align(self.map_xy, run_xy, self.bin, self.angle_step, self.yaw_hint,
                                   self.max_points, self.overlap_cell, prior, self.prior_window,
-                                  self.tie)
+                                  self.tie, self.map_yaw, self.distance_map)
         rospy.loginfo('[room localization] %d run points, mean distance to the map %.3f m, took %.1f s',
                       len(run_xy), score, (rospy.Time.now() - start).to_sec())
-        rospy.loginfo('[room localization] %s -> %s: translation (%.3f, %.3f) m, rotation %.2f deg',
-                      self.map_frame, self.odom_frame, shift[0], shift[1], np.degrees(yaw))
-
         # the match is between level frames; camera_init keeps the tilt of the lidar
-        map_to_odom = matrix_of_planar(shift, yaw).dot(self.level)
+        self.publish(matrix_of_planar(shift, yaw).dot(self.level), 'the match')
+        return True
+
+    def publish(self, map_to_odom, source):
+        """Publish map -> odom, and map -> world when the robot odometry is there."""
+        shift, yaw = planar_of(map_to_odom)
+        rospy.loginfo('[room localization] %s -> %s from %s: translation (%.3f, %.3f) m, rotation %.2f deg',
+                      self.map_frame, self.odom_frame, source, shift[0], shift[1], np.degrees(yaw))
         transforms = [self.transform_msg(self.odom_frame, map_to_odom)]
         if self.world_frame:
             map_to_world = self.world_transform(map_to_odom)
@@ -575,7 +612,6 @@ class RoomLocalization(object):
                               translation[1], translation[2], np.degrees(world_yaw))
                 transforms.append(self.transform_msg(self.world_frame, map_to_world))
         self.broadcaster.sendTransform(transforms)
-        return True
 
     def transform_msg(self, child_frame, matrix):
         quaternion = tft.quaternion_from_matrix(matrix)

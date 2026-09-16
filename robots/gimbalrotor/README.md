@@ -125,8 +125,10 @@ needs the robot model (robot_description and its tf) to be running.
 
 When the match is wrong, or the room is too symmetric to decide, point at the robot in rviz as in a 2D
 localization: `config/room.rviz` of gimbalrotor_remote shows the map (`~map_cloud` of the node) and has the
-"2D Pose Estimate" tool, and the pose it publishes starts a new match that keeps the turn closest to it and
-the shift within `~prior_window` (3 m) of it.
+"2D Pose Estimate" tool. The robot jumps to the pose given there at once, and a couple of seconds later to
+where the cloud fits, so pointing at a wrong place is a quick way to see that the localization runs. The
+given pose only decides between fits that are equally good (the same room turned by 180 deg), so point
+roughly the right way; its position may be anywhere.
 
 ```bash
 rosrun gimbalrotor_remote remote_rviz.sh <robot host> \
