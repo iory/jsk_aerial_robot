@@ -90,6 +90,28 @@ The onboard PC reaches the LiDAR over Ethernet and the depth camera over USB.
 - `Mipi device capability could not be grabbed` in the RealSense log is harmless: it looks for MIPI cameras
   and the D435 is on USB.
 
+## same coordinates on every run (lidar)
+
+fast_lio starts its world at the pose where it was switched on, so a place has different coordinates on
+every run. `script/room_localization.py` matches the cloud of the run against a map recorded once and
+publishes `map -> camera_init`, after which a place keeps its coordinates.
+
+```bash
+# record the map once, with pcd_save/pcd_save_en of fast_lio on (writes <fast_lio>/PCD/scans.pcd)
+roslaunch livox_ros_driver2 msg_MID360.launch
+roslaunch fast_lio mapping_mid360.launch rviz:=false
+
+# every run, with the lidar driver and fast_lio already running
+roslaunch gimbalrotor room_localization.launch map:=/path/to/scans.pcd
+```
+
+It takes the wall directions of both clouds (the angle whose histograms of the point coordinates are
+sharpest) and the shift that correlates them best, so it needs no initial guess. A rectangular room repeats
+every 180 deg, so set `yaw_hint:=` to the heading the robot had when the map was recorded, or place it that
+way. `~relocalize` (std_srvs/Empty) redoes the match.
+
+Recorded maps are site data and are not in this repository.
+
 ## arm
 
 The arm joints are `<robot_ns>/arm/arm_controller` (`position_controllers/JointTrajectoryController` through
