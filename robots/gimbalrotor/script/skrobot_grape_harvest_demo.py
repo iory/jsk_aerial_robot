@@ -30,6 +30,13 @@ real machine::
     rosrun gimbalrotor skrobot_grape_harvest_demo.py --dry-run   # print the plan only
     rosrun gimbalrotor skrobot_grape_harvest_demo.py --bunches 0
 
+With ``--targets detect`` the bunches are not read from the config: the robot
+looks at what grape_detector sees from where it stands and harvests those,
+nearest first (see the ``detection`` section of the config)::
+
+    roslaunch grape_detector grape_detection.launch
+    rosrun gimbalrotor skrobot_grape_harvest_demo.py --targets detect
+
 If a step fails, the script stops there and leaves the robot as it is (e.g.
 hovering) for the operator.
 """
@@ -38,13 +45,17 @@ import argparse
 import os
 import sys
 
+from jsk_recognition_msgs.msg import BoundingBoxArray
 import numpy as np
 import rospkg
 import rospy
 from skrobot.coordinates import Coordinates
 from skrobot.coordinates.math import matrix2ypr
+from skrobot.coordinates.math import quaternion2matrix
+from skrobot.coordinates.math import xyzw2wxyz
 from skrobot.coordinates.math import ypr2matrix
 from skrobot.models.urdf import RobotModelFromURDF
+import tf2_ros
 import yaml
 
 from gimbalrotor.skrobot_interface import GimbalrotorROSRobotInterface
@@ -65,6 +76,11 @@ def parse_args():
     parser.add_argument('--bunches', type=int, nargs='+', default=None,
                         help='indices of the bunches to harvest '
                         '(default: all, in the order of the config)')
+    parser.add_argument('--targets', choices=('config', 'detect'),
+                        default='config',
+                        help='config (default): the bunches of the config. '
+                        'detect: the bunches that grape_detector sees from '
+                        'where the robot stands, nearest first')
     parser.add_argument('--field-frame', choices=('start', 'world'),
                         default='start',
                         help='start (default, gazebo and the real machine): '
@@ -125,6 +141,7 @@ class GrapeHarvestDemo(object):
         self.ri = ri
         self.field = config['field']
         self.motion = config['motion']
+        self.detection = config['detection']
         self.arm_joint_names = [
             name for name in ri.arm_controller['joint_names']
             if name != ri.gripper.drive_joint_name]
@@ -141,6 +158,8 @@ class GrapeHarvestDemo(object):
         self.field_coords = None
         self.yaw = None
         self.home = None
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
     # ------------------------------------------------------------------
     # frames
@@ -178,6 +197,132 @@ class GrapeHarvestDemo(object):
         self.yaw = yaw
         rospy.loginfo('field frame: origin %s, yaw %.3f rad (world frame)',
                       np.round(origin, 3), yaw)
+
+    def to_field(self, point_world):
+        """Return a point of the world frame in the field frame."""
+        return self.field_coords.inverse_transformation().transform_vector(
+            np.asarray(point_world, dtype=np.float64))
+
+    # ------------------------------------------------------------------
+    # detection
+    # ------------------------------------------------------------------
+    def detect_bunches(self):
+        """Return the bunches that the detector sees, in the field frame.
+
+        The boxes of ``detection/topic`` are collected for ``observe_time``,
+        transformed into the field frame and grouped by distance; a group seen
+        in at least ``min_observations`` messages is a bunch. Its grasp point
+        is the middle of the top of its box (the gripper pinches the stem just
+        above the berries), averaged over the group.
+
+        Returns
+        -------
+        list of dict
+            ``{'name': str, 'stem': [x, y, z]}`` of each bunch, nearest first.
+        """
+        d = self.detection
+        region = d['region']
+        rospy.loginfo('collecting the boxes of %s for %.1f s',
+                      d['topic'], d['observe_time'])
+        groups = []  # the points of one bunch, seen in several messages
+        end = rospy.get_time() + d['observe_time']
+        messages = 0
+        while rospy.get_time() < end and not rospy.is_shutdown():
+            try:
+                msg = rospy.wait_for_message(
+                    d['topic'], BoundingBoxArray,
+                    timeout=max(0.1, end - rospy.get_time()))
+            except rospy.ROSException:
+                break
+            messages += 1
+            for box in msg.boxes:
+                point = self.box_grasp_point(box, msg.header.frame_id)
+                if point is None:
+                    continue
+                if not all(region[axis][0] <= point[i] <= region[axis][1]
+                           for i, axis in enumerate(('x', 'y', 'z'))):
+                    continue
+                for group in groups:
+                    if np.linalg.norm(np.mean(group, axis=0) - point) \
+                       <= d['cluster_radius']:
+                        group.append(point)
+                        break
+                else:
+                    groups.append([point])
+        if messages == 0:
+            raise DemoError(
+                'no message on {}; is grape_detection.launch running?'.format(
+                    d['topic']))
+        bunches = []
+        for group in groups:
+            if len(group) < d['min_observations']:
+                continue
+            bunches.append(
+                {'stem': [float(v) for v in np.mean(group, axis=0)],
+                 'seen': len(group),
+                 'spread': float(np.linalg.norm(np.std(group, axis=0)))})
+        bunches.sort(key=lambda b: np.linalg.norm(b['stem']))
+        bunches = bunches[:d['max_targets']]
+        if not bunches:
+            raise DemoError(
+                'no bunch was seen {} times in {} messages inside {}'.format(
+                    d['min_observations'], messages, region))
+        for i, bunch in enumerate(bunches):
+            bunch['name'] = 'detected_{}'.format(i)
+            rospy.loginfo('bunch %d: stem %s (seen %d of %d messages, spread '
+                          '%.3f m)', i, np.round(bunch['stem'], 3),
+                          bunch['seen'], messages, bunch['spread'])
+        return bunches
+
+    def box_grasp_point(self, box, frame_id):
+        """Return the grasp point of a bounding box in the field frame.
+
+        Parameters
+        ----------
+        box : jsk_recognition_msgs.msg.BoundingBox
+            Box around the berries of a bunch.
+        frame_id : str
+            Frame of the array, used when the box carries none.
+
+        Returns
+        -------
+        numpy.ndarray or None
+            Point on the stem; None if the box is too big to be a bunch or if
+            its frame can not be transformed.
+        """
+        d = self.detection
+        size = np.array([box.dimensions.x, box.dimensions.y,
+                         box.dimensions.z])
+        if size.max() > d['max_box_size'] or size.min() <= 0.0:
+            return None
+        frame = box.header.frame_id or frame_id
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                d['world_frame'], frame, box.header.stamp,
+                rospy.Duration(0.5))
+        except tf2_ros.TransformException as e:
+            rospy.logwarn_throttle(
+                5.0, 'no transform %s -> %s: %s', frame, d['world_frame'], e)
+            return None
+        t = transform.transform.translation
+        q = transform.transform.rotation
+        world_to_frame = Coordinates(
+            pos=[t.x, t.y, t.z],
+            rot=quaternion2matrix(xyzw2wxyz(np.array([q.x, q.y, q.z, q.w]))))
+        p = box.pose.position
+        r = box.pose.orientation
+        frame_to_box = Coordinates(
+            pos=[p.x, p.y, p.z],
+            rot=quaternion2matrix(xyzw2wxyz(np.array([r.x, r.y, r.z, r.w]))))
+        box_coords = world_to_frame.copy_worldcoords().transform(frame_to_box)
+        # the stem hangs over the middle of the top of the box
+        corners = np.array([[sx, sy, sz] for sx in (-0.5, 0.5)
+                            for sy in (-0.5, 0.5) for sz in (-0.5, 0.5)])
+        top = max(box_coords.transform_vector(corner * size)[2]
+                  for corner in corners)
+        center = box_coords.worldpos()
+        return self.to_field(
+            [center[0], center[1], top + d['stem_offset']])
 
     def to_world(self, point):
         return self.field_coords.transform_vector(
@@ -448,20 +593,21 @@ def main():
     rospy.init_node('skrobot_grape_harvest_demo', disable_signals=True)
     with open(args.config) as f:
         config = yaml.safe_load(f)
-    all_bunches = config['field']['bunches']
-    indices = args.bunches if args.bunches is not None \
-        else list(range(len(all_bunches)))
-    for index in indices:
-        if not 0 <= index < len(all_bunches):
-            rospy.logerr('bunch index %d is out of [0, %d)', index,
-                         len(all_bunches))
-            sys.exit(1)
-    bunches = [(index, all_bunches[index]) for index in indices]
-
     ri = GimbalrotorROSRobotInterface()
     try:
         demo = GrapeHarvestDemo(ri, config)
         demo.set_field_frame(args.field_frame)
+        if args.targets == 'detect':
+            all_bunches = demo.detect_bunches()
+        else:
+            all_bunches = config['field']['bunches']
+        indices = args.bunches if args.bunches is not None \
+            else list(range(len(all_bunches)))
+        for index in indices:
+            if not 0 <= index < len(all_bunches):
+                raise DemoError('bunch index {} is out of [0, {})'.format(
+                    index, len(all_bunches)))
+        bunches = [(index, all_bunches[index]) for index in indices]
         demo.print_plan(bunches)
         if args.dry_run:
             return

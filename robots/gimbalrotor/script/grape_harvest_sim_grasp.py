@@ -84,7 +84,7 @@ class SimGrasp(object):
 
         self.drive_angle = None
         self.link_states = None
-        self.closed = False
+        self.closed = None  # unknown until the first gripper state
         self.held = None  # name of the held bunch model
         self.held_offset = None  # pose of the bunch in the pad frame
 
@@ -149,6 +149,9 @@ class SimGrasp(object):
             self.closed = True
         elif fraction > self.open_fraction:
             self.closed = False
+        if was_closed is None:
+            # the state at startup is not a closing of the gripper
+            return
 
         if self.held is None:
             if self.closed and not was_closed:

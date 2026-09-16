@@ -3,7 +3,9 @@ classes:
   - "a bunch of grapes"
   - "grape cluster"
   - "grapes"
-conf: 0.05        # score of a detection to keep it
+  - "green grapes"
+  - "white grapes"
+conf: 0.02        # score of a detection to keep it; the bunches in gazebo score 0.02-0.4
 iou: 0.5          # non maximum suppression
 max_detections: 20
 

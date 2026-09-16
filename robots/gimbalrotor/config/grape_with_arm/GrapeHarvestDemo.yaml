@@ -42,6 +42,26 @@ field:
     - {center: [-2.8, -3.2], yaw: 1.5708}
     - {center: [-2.8, 3.2], yaw: 1.5708}
 
+# with --targets detect the bunches come from grape_detector (jsk_recognition_msgs/BoundingBoxArray)
+# instead of field/bunches above; see script/skrobot_grape_harvest_demo.py
+detection:
+  topic: /grape_boxes/boxes
+  world_frame: world
+  observe_time: 3.0        # [s] the boxes are collected for this long before the targets are picked
+  min_observations: 3      # a bunch has to be seen in this many messages
+  cluster_radius: 0.12     # [m] boxes nearer than this to each other are the same bunch
+  # the gripper pinches the stem, which is just above the top of the box of the berries
+  stem_offset: 0.015       # [m]
+  max_box_size: 0.4        # [m] a bigger box is a clump of canopy, not a bunch
+  max_targets: 3
+  # where a bunch the robot may pick is, in the field frame [m]: the ones hanging at the front face
+  # of the row. The bunches deeper in the canopy are detected as well (they are real grapes), but
+  # the rotors would be in the leaves before the gripper reached them.
+  region:
+    x: [1.6, 2.2]
+    y: [-1.5, 1.5]
+    z: [0.8, 1.6]
+
 motion:
   # the gripper approaches a stem horizontally along the heading of the robot
   approach_distance: 0.35   # distance in front of the stem where the approach starts
