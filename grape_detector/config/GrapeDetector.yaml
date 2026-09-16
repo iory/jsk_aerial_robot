@@ -1,0 +1,19 @@
+# YOLO-World is open vocabulary: these prompts are the classes, nothing is trained
+classes:
+  - "a bunch of grapes"
+  - "grape cluster"
+  - "grapes"
+conf: 0.05        # score of a detection to keep it
+iou: 0.5          # non maximum suppression
+max_detections: 20
+
+# the points of a detection: inside the box, at the depth of its front (the bunch hangs in front
+# of the canopy, which would otherwise end up in the same 3d box)
+depth_quantile: 0.2   # "front" of the box, as a quantile of the depth in it
+depth_margin: 0.15    # [m] kept behind and in front of it
+min_depth: 0.2        # [m] the d435 sees from here
+max_depth: 10.0       # [m]
+min_points: 30        # a detection with fewer points gives no 3d box
+
+queue_size: 5
+slop: 0.2             # [s] between the color image and the depth image

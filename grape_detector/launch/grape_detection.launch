@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<!-- Detect grape bunches in the camera of the robot and publish them as 3d bounding boxes.
+
+     color image + aligned depth ─┬─ depth_image_proc/point_cloud_xyzrgb ─ organized cloud ─┐
+                                  └─ grape_detector_node ─ cluster indices ────────────────┴─ jsk_pcl_ros/ClusterPointIndicesDecomposer ─ boxes
+
+     The same launch runs on the real machine and in gazebo: the topics of realsense2_camera and of
+     the gazebo camera are the same. -->
+<launch>
+  <arg name="robot_ns" default="gimbalrotor" />
+  <arg name="camera_ns" default="$(arg robot_ns)/camera" />
+  <arg name="manager" default="grape_detection_manager" />
+  <arg name="device" default="cuda:0" />
+  <arg name="model" default="yolov8x-worldv2.pt" />
+  <!-- seconds between two detections; 0 runs on every image -->
+  <arg name="min_interval" default="0.0" />
+  <arg name="config" default="$(find grape_detector)/config/GrapeDetector.yaml" />
+
+  <node pkg="nodelet" type="nodelet" name="$(arg manager)" args="manager" output="screen" />
+
+  <!-- the organized cloud the indices of the detector point into -->
+  <node pkg="nodelet" type="nodelet" name="grape_points"
+        args="load depth_image_proc/point_cloud_xyzrgb $(arg manager)" output="screen">
+    <remap from="rgb/image_rect_color" to="/$(arg camera_ns)/color/image_raw" />
+    <remap from="rgb/camera_info" to="/$(arg camera_ns)/color/camera_info" />
+    <remap from="depth_registered/image_rect" to="/$(arg camera_ns)/aligned_depth_to_color/image_raw" />
+    <remap from="depth_registered/points" to="grape_detection/points" />
+    <param name="queue_size" value="10" />
+  </node>
+
+  <node pkg="grape_detector" type="grape_detector_node.py" name="grape_detector" output="screen">
+    <rosparam file="$(arg config)" command="load" />
+    <param name="device" value="$(arg device)" />
+    <param name="model" value="$(arg model)" />
+    <param name="min_interval" value="$(arg min_interval)" />
+    <remap from="~input/image" to="/$(arg camera_ns)/color/image_raw" />
+    <remap from="~input/depth" to="/$(arg camera_ns)/aligned_depth_to_color/image_raw" />
+  </node>
+
+  <node pkg="nodelet" type="nodelet" name="grape_boxes"
+        args="load jsk_pcl/ClusterPointIndicesDecomposer $(arg manager)" output="screen">
+    <remap from="~input" to="grape_detection/points" />
+    <remap from="~target" to="grape_detector/output/cluster_indices" />
+    <param name="approximate_sync" value="true" />
+    <param name="queue_size" value="20" />
+    <param name="align_boxes" value="false" />
+    <param name="use_pca" value="false" />
+    <param name="publish_tf" value="false" />
+  </node>
+</launch>
