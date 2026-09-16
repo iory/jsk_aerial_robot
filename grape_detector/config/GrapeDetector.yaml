@@ -1,4 +1,6 @@
-# YOLO-World is open vocabulary: these prompts are the classes, nothing is trained
+# YOLO-World and YOLOE are open vocabulary: these prompts are the classes, nothing is trained.
+# A model for the NPU (backend: adla) has them fixed when it is converted; convert it again after
+# changing them (scripts/export_adla_model.py).
 classes:
   - "a bunch of grapes"
   - "grape cluster"
@@ -8,6 +10,7 @@ classes:
 conf: 0.02        # score of a detection to keep it; the bunches in gazebo score 0.02-0.4
 iou: 0.5          # non maximum suppression
 max_detections: 20
+agnostic_nms: true  # the prompts are synonyms: one box for a bunch whichever prompt it matches
 
 # the points of a detection: inside the box, at the depth of its front (the bunch hangs in front
 # of the canopy, which would otherwise end up in the same 3d box)

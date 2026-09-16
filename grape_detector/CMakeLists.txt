@@ -5,6 +5,8 @@ find_package(catkin REQUIRED COMPONENTS
   catkin_virtualenv
   )
 
+catkin_python_setup()
+
 catkin_package()
 
 # ultralytics (YOLO-World) and torch go into a virtualenv in the devel/install space, locked in
@@ -31,6 +33,7 @@ else()
     )
   catkin_install_python(PROGRAMS
     scripts/grape_detector_node.py
+    scripts/export_adla_model.py
     DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
     )
 endif()

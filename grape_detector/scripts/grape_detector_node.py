@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Detect grape bunches in a color image with YOLO-World.
+"""Detect grape bunches in a color image with an open vocabulary YOLO.
 
 The detector is open vocabulary: the classes are the prompts of
 ``~classes`` (e.g. "a bunch of grapes"), so nothing has to be trained.
+``~backend`` picks how it runs:
+
+* ``ultralytics``: YOLO-World or YOLOE with torch, on a gpu or the cpu.
+* ``adla``: a YOLOE converted to .adla by scripts/export_adla_model.py, on the
+  NPU of a Khadas VIM4.
 
 Published for each image:
 
@@ -19,6 +24,8 @@ node and jsk_pcl_ros/ClusterPointIndicesDecomposer, which turns the indices into
 jsk_recognition_msgs/BoundingBoxArray in the frame of the camera.
 """
 
+import cv2
+from grape_detector.detectors import create_detector
 import numpy as np
 import rospy
 from jsk_recognition_msgs.msg import ClassificationResult
@@ -79,6 +86,25 @@ def depth_to_numpy(msg):
     return np.nan_to_num(depth, nan=0.0, posinf=0.0, neginf=0.0)
 
 
+def draw_detections(image, detections, classes):
+    """Return a copy of a BGR image with the detections drawn on it."""
+    canvas = image.copy()
+    thickness = max(1, int(round(sum(image.shape[:2]) / 600.0)))
+    for box, score, label in zip(detections.boxes, detections.scores,
+                                 detections.labels):
+        x1, y1, x2, y2 = (int(round(v)) for v in box)
+        cv2.rectangle(canvas, (x1, y1), (x2, y2), (0, 255, 0), thickness)
+        text = '{} {:.2f}'.format(classes[label], score)
+        (width, height), baseline = cv2.getTextSize(
+            text, cv2.FONT_HERSHEY_SIMPLEX, 0.25 * thickness, thickness)
+        top = max(y1 - height - baseline, 0)
+        cv2.rectangle(canvas, (x1, top), (x1 + width, top + height + baseline),
+                      (0, 255, 0), -1)
+        cv2.putText(canvas, text, (x1, top + height), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.25 * thickness, (0, 0, 0), thickness, cv2.LINE_AA)
+    return canvas
+
+
 class GrapeDetector(object):
 
     def __init__(self):
@@ -87,6 +113,8 @@ class GrapeDetector(object):
         self.conf = rospy.get_param('~conf', 0.05)
         self.iou = rospy.get_param('~iou', 0.5)
         self.max_detections = rospy.get_param('~max_detections', 20)
+        # the prompts are synonyms: one bunch is one box whichever it matches
+        self.agnostic_nms = rospy.get_param('~agnostic_nms', True)
         # a bunch hangs in front of the canopy: keep the points within
         # depth_margin behind the front of the box
         self.depth_quantile = rospy.get_param('~depth_quantile', 0.2)
@@ -97,25 +125,12 @@ class GrapeDetector(object):
         self.min_rate = rospy.get_param('~min_interval', 0.0)
         self.last_stamp = None
 
-        device = rospy.get_param('~device', 'auto')
-        import torch
-        from ultralytics import YOLO
-        if device == 'auto':
-            # the venv has a cpu-only torch on a machine built without a gpu
-            device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-        self.model = YOLO(model_path)
-        self.model.set_classes(list(classes))
-        try:
-            self.model.to(device)
-        except Exception as e:  # no gpu, or no driver for it
-            rospy.logwarn('[%s] can not use %s (%s), falling back to the cpu',
-                          rospy.get_name(), device, e)
-            device = 'cpu'
-            self.model.to(device)
-        self.device = device
-        self.classes = list(classes)
-        rospy.loginfo('[%s] %s on %s, classes %s', rospy.get_name(),
-                      model_path, device, self.classes)
+        backend = rospy.get_param('~backend', 'ultralytics')
+        self.detector = create_detector(
+            backend, model_path, classes, rospy.get_param('~device', 'auto'))
+        self.classes = self.detector.classes
+        rospy.loginfo('[%s] %s with %s on %s, classes %s', rospy.get_name(),
+                      model_path, backend, self.detector.device, self.classes)
 
         self.pub_image = rospy.Publisher('~output/image', Image, queue_size=1)
         self.pub_rects = rospy.Publisher(
@@ -148,30 +163,27 @@ class GrapeDetector(object):
                 depth.shape[:2], image.shape[:2])
             return
 
-        results = self.model.predict(
-            source=image, conf=self.conf, iou=self.iou,
-            max_det=self.max_detections, device=self.device, verbose=False)
-        result = results[0]
-        boxes = result.boxes
+        detections = self.detector.detect(
+            image, self.conf, self.iou, self.max_detections,
+            self.agnostic_nms)
 
         rects = RectArray(header=image_msg.header)
         classification = ClassificationResult(
             header=image_msg.header, target_names=self.classes)
         cluster_indices = ClusterPointIndices(header=depth_msg.header)
         height, width = image.shape[:2]
-        for box in boxes:
-            x1, y1, x2, y2 = (int(round(v)) for v in box.xyxy[0].tolist())
+        for box, score, label in zip(detections.boxes, detections.scores,
+                                     detections.labels):
+            x1, y1, x2, y2 = (int(round(v)) for v in box)
             x1, x2 = max(0, x1), min(width, x2)
             y1, y2 = max(0, y1), min(height, y2)
             if x2 <= x1 or y2 <= y1:
                 continue
-            label = int(box.cls.item())
-            score = float(box.conf.item())
             rects.rects.append(
                 Rect(x=x1, y=y1, width=x2 - x1, height=y2 - y1))
-            classification.labels.append(label)
+            classification.labels.append(int(label))
             classification.label_names.append(self.classes[label])
-            classification.label_proba.append(score)
+            classification.label_proba.append(float(score))
             indices = self.box_indices(depth, x1, y1, x2, y2, width)
             cluster_indices.cluster_indices.append(
                 PointIndices(header=depth_msg.header, indices=indices))
@@ -181,7 +193,8 @@ class GrapeDetector(object):
         self.pub_indices.publish(cluster_indices)
         if self.pub_image.get_num_connections() > 0:
             self.pub_image.publish(numpy_to_image(
-                result.plot(), image_msg.header, image_msg.encoding))
+                draw_detections(image, detections, self.classes),
+                image_msg.header, image_msg.encoding))
 
     def box_indices(self, depth, x1, y1, x2, y2, width):
         """Return the indices of the points of a bunch inside a box.
