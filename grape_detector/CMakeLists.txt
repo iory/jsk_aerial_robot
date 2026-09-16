@@ -34,6 +34,7 @@ else()
   catkin_install_python(PROGRAMS
     scripts/grape_detector_node.py
     scripts/export_adla_model.py
+    scripts/replay_video.py
     DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
     )
 endif()
