@@ -158,6 +158,8 @@ class GrapeHarvestDemo(object):
         self.field_coords = None
         self.yaw = None
         self.home = None
+        self.waiting_pose = None
+        self._geometry = None
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
@@ -206,7 +208,7 @@ class GrapeHarvestDemo(object):
     # ------------------------------------------------------------------
     # detection
     # ------------------------------------------------------------------
-    def detect_bunches(self):
+    def detect_bunches(self, observe_time=None, report=True):
         """Return the bunches that the detector sees, in the field frame.
 
         The boxes of ``detection/topic`` are collected for ``observe_time``,
@@ -222,10 +224,13 @@ class GrapeHarvestDemo(object):
         """
         d = self.detection
         region = d['region']
-        rospy.loginfo('collecting the boxes of %s for %.1f s',
-                      d['topic'], d['observe_time'])
+        if observe_time is None:
+            observe_time = d['observe_time']
+        if report:
+            rospy.loginfo('collecting the boxes of %s for %.1f s',
+                          d['topic'], observe_time)
         groups = []  # the points of one bunch, seen in several messages
-        end = rospy.get_time() + d['observe_time']
+        end = rospy.get_time() + observe_time
         messages = 0
         while rospy.get_time() < end and not rospy.is_shutdown():
             try:
@@ -269,9 +274,10 @@ class GrapeHarvestDemo(object):
                     d['min_observations'], messages, region))
         for i, bunch in enumerate(bunches):
             bunch['name'] = 'detected_{}'.format(i)
-            rospy.loginfo('bunch %d: stem %s (seen %d of %d messages, spread '
-                          '%.3f m)', i, np.round(bunch['stem'], 3),
-                          bunch['seen'], messages, bunch['spread'])
+            if report:
+                rospy.loginfo('bunch %d: stem %s (seen %d of %d messages, '
+                              'spread %.3f m)', i, np.round(bunch['stem'], 3),
+                              bunch['seen'], messages, bunch['spread'])
         return bunches
 
     def box_grasp_point(self, box, frame_id):
@@ -367,6 +373,259 @@ class GrapeHarvestDemo(object):
         if not self.ri.update_robot_state(wait_until_update=True):
             raise DemoError('joint states are not received')
         return gripper_center(self.ri.robot, self.ri.gripper)
+
+    # ------------------------------------------------------------------
+    # arm
+    # ------------------------------------------------------------------
+    def set_arm(self, robot, arm_pose):
+        """Set the arm joints of a model, leaving the gripper as it is."""
+        for name, angle in arm_pose.items():
+            getattr(robot, name).joint_angle(angle)
+
+    def arm_geometry(self):
+        """Return the lengths of the arm, measured on the model.
+
+        The arm is three yaw joints and one pitch joint, all in the body: in
+        the horizontal plane it is a 3R arm whose last joint can pitch the
+        gripper up or down.
+
+        Returns
+        -------
+        dict
+            ``shoulder`` (the first yaw joint), ``l1``, ``l2`` (to the second
+            and the third yaw joint), ``l3`` (to the pitch joint), ``l4`` (to
+            the gripper center) and ``tcp`` (the gripper center of the
+            stretched arm), in the root frame.
+        """
+        if self._geometry is not None:
+            return self._geometry
+        robot = self.plan_robot
+        robot.angle_vector(np.zeros(len(robot.angle_vector())))
+        robot.newcoords(Coordinates())
+        joints = [getattr(robot, '{}_link1'.format(name[:-7])).worldpos()
+                  for name in self.arm_joint_names]
+        tcp = gripper_center(robot, self.ri.gripper)
+        self._geometry = dict(
+            shoulder=joints[0],
+            l1=float(np.linalg.norm((joints[1] - joints[0])[:2])),
+            l2=float(np.linalg.norm((joints[2] - joints[1])[:2])),
+            l3=float(np.linalg.norm((joints[3] - joints[2])[:2])),
+            l4=float(np.linalg.norm(tcp - joints[3])),
+            tcp=tcp)
+        rospy.loginfo('arm: shoulder %s, links %.3f %.3f %.3f %.3f m, '
+                      'gripper of the stretched arm %s',
+                      np.round(self._geometry['shoulder'], 3),
+                      self._geometry['l1'], self._geometry['l2'],
+                      self._geometry['l3'], self._geometry['l4'],
+                      np.round(tcp, 3))
+        return self._geometry
+
+    def arm_angles(self, target, elbow=-1.0):
+        """Return the arm angles that put the gripper center at a point.
+
+        The point is in the frame of the root of the robot, so no odometry
+        enters the solution. The gripper keeps pointing along the x axis of
+        the body (the three yaw angles add up to zero), so that the stem
+        slides into the fingers the same way wherever the arm reaches; only
+        the pitch of the last joint tilts it, to reach up or down.
+
+        The closed form is solved on the lengths of ``arm_geometry`` and then
+        corrected with the forward kinematics of the model, which has the
+        small offsets between the joints that the plane does not.
+
+        Parameters
+        ----------
+        target : array_like
+            ``(3,)`` target of the gripper center in the root frame [m].
+        elbow : float
+            -1 or +1, the two solutions of the 2R arm.
+
+        Returns
+        -------
+        dict
+            ``{joint name: angle [rad]}`` of the arm joints.
+        """
+        target = np.asarray(target, dtype=np.float64)
+        g = self.arm_geometry()
+        aim = target.copy()
+        angles = None
+        for _ in range(4):
+            angles = self._arm_angles_planar(aim, elbow)
+            if angles is None:
+                raise DemoError(
+                    'the arm can not reach {} in the body frame'.format(
+                        np.round(target, 3)))
+            error = target - self.arm_forward(angles)
+            if np.linalg.norm(error) < 0.001:
+                break
+            aim = aim + error
+        limit = self.motion['max_arm_angle']
+        if max(abs(a) for a in angles) > limit:
+            raise DemoError(
+                'the arm would fold to {} to reach {}, further than '
+                'max_arm_angle {}'.format([round(a, 2) for a in angles],
+                                          np.round(target, 3), limit))
+        return dict(zip(self.arm_joint_names, angles))
+
+    def _arm_angles_planar(self, target, elbow):
+        """Closed form of the arm on the lengths of ``arm_geometry``."""
+        g = self.arm_geometry()
+        sine = (g['tcp'][2] - target[2]) / g['l4']
+        if abs(sine) > 0.9:
+            return None
+        pitch = float(np.arcsin(sine))
+        # the last link only reaches l4 * cos(pitch) forward when it is tilted
+        reach = g['l3'] + g['l4'] * np.cos(pitch)
+        wrist = target[:2] - np.array([reach, 0.0]) - g['shoulder'][:2]
+        distance = float(np.linalg.norm(wrist))
+        if distance > g['l1'] + g['l2'] or distance < abs(g['l1'] - g['l2']):
+            return None
+        cosine = np.clip((distance ** 2 - g['l1'] ** 2 - g['l2'] ** 2)
+                         / (2.0 * g['l1'] * g['l2']), -1.0, 1.0)
+        second = elbow * float(np.arccos(cosine))
+        first = float(np.arctan2(wrist[1], wrist[0])
+                      - np.arctan2(g['l2'] * np.sin(second),
+                                   g['l1'] + g['l2'] * np.cos(second)))
+        return [first, second, -(first + second), pitch]
+
+    def arm_forward(self, angles):
+        """Return the gripper center of the model for arm angles [rad]."""
+        robot = self.plan_robot
+        robot.angle_vector(np.zeros(len(robot.angle_vector())))
+        for name, angle in zip(self.arm_joint_names, angles):
+            getattr(robot, name).joint_angle(angle)
+        robot.newcoords(Coordinates())
+        return gripper_center(robot, self.ri.gripper)
+
+    def waiting_arm_pose(self):
+        """Return the arm angles the robot flies and waits with.
+
+        The gripper is ``arm_standoff`` behind where the stretched arm holds
+        it, which leaves the arm room to reach forward, back and sideways.
+
+        Returns
+        -------
+        dict
+            ``{joint name: angle [rad]}``.
+        """
+        g = self.arm_geometry()
+        target = g['tcp'] - np.array([self.motion['arm_standoff'], 0.0, 0.0])
+        pose = self.arm_angles(target)
+        rospy.loginfo('the arm waits at %s, the gripper %.3f m behind the '
+                      'stretched arm', {k: round(v, 3)
+                                        for k, v in pose.items()},
+                      self.motion['arm_standoff'])
+        return pose
+
+    def reach_arm_pose(self, label, stem_world):
+        """Return the arm angles that put the gripper on a stem.
+
+        The stem is taken into the frame of the root of the robot with the
+        measured pose, so that where the body actually is does not matter.
+
+        Parameters
+        ----------
+        label : str
+            Name of the motion for the log.
+        stem_world : numpy.ndarray
+            Stem in the world frame [m].
+
+        Returns
+        -------
+        dict
+            ``{joint name: angle [rad]}`` of the arm joints.
+        """
+        if not self.ri.update_robot_state(wait_until_update=True):
+            raise DemoError('joint states are not received')
+        root = self.ri.robot.root_link.copy_worldcoords()
+        target = root.inverse_transform_vector(
+            np.asarray(stem_world, dtype=np.float64))
+        robot = self.plan_robot
+        robot.angle_vector(np.zeros(len(robot.angle_vector())))
+        self.set_arm(robot, self.waiting_pose)
+        robot.newcoords(Coordinates())
+        waiting = gripper_center(robot, self.ri.gripper)
+        correction = np.linalg.norm(target - waiting)
+        rospy.loginfo('[%s] the arm reaches %s in the body frame, %.3f m from '
+                      'the waiting pose', label, np.round(target, 3),
+                      correction)
+        if correction > self.motion['max_arm_correction']:
+            raise DemoError(
+                '[{}] the stem is {:.3f} m from the waiting pose of the arm, '
+                'more than max_arm_correction'.format(label, correction))
+        return self.arm_angles(target)
+
+    def reach_with_arm(self, label, stem_world):
+        """Put the gripper on the stem with the arm, and keep it there.
+
+        The servos do not land exactly on the angles they are given (and the
+        arm bends under its own weight), so the gripper is measured from the
+        joint angles after each motion and the arm is sent again with the
+        error taken out. The body is not moved.
+
+        Parameters
+        ----------
+        label : str
+            Name of the motion for the log.
+        stem_world : numpy.ndarray
+            Stem in the world frame [m].
+        """
+        m = self.motion
+        aim = np.asarray(stem_world, dtype=np.float64).copy()
+        for attempt in range(m['max_arm_tries']):
+            self.move_arm(label + ' reach', self.reach_arm_pose(label, aim))
+            error = self.measured_tcp() - np.asarray(stem_world)
+            rospy.loginfo('[%s] the gripper is %s from the stem (%.3f m)',
+                          label, np.round(error, 3), np.linalg.norm(error))
+            if np.linalg.norm(error) <= m['gripper_tolerance']:
+                return
+            if attempt + 1 < m['max_arm_tries']:
+                aim = aim - error
+        raise DemoError(
+            '[{}] the arm did not put the gripper within {} m of the stem in '
+            '{} tries'.format(label, m['gripper_tolerance'],
+                              m['max_arm_tries']))
+
+    def refine_stem(self, label, stem_field):
+        """Measure a bunch again from close by, and return its stem.
+
+        Parameters
+        ----------
+        label : str
+            Name of the motion for the log.
+        stem_field : array_like
+            Expected stem in the field frame [m].
+
+        Returns
+        -------
+        numpy.ndarray
+            Stem in the field frame: the detection nearest to the expected
+            one, or the expected one when nothing is seen near it.
+        """
+        expected = np.asarray(stem_field, dtype=np.float64)
+        if self.motion['refine_time'] <= 0.0:
+            return expected
+        try:
+            bunches = self.detect_bunches(
+                observe_time=self.motion['refine_time'], report=False)
+        except DemoError as e:
+            rospy.logwarn('[%s] no detection to refine the stem: %s', label, e)
+            return expected
+        near = [b for b in bunches
+                if np.linalg.norm(np.array(b['stem']) - expected)
+                <= self.motion['refine_radius']]
+        if not near:
+            rospy.logwarn('[%s] no bunch within %.2f m of %s was detected '
+                          'from here; keep the target of the plan', label,
+                          self.motion['refine_radius'], np.round(expected, 3))
+            return expected
+        best = min(near, key=lambda b: np.linalg.norm(
+            np.array(b['stem']) - expected))
+        stem = np.array(best['stem'])
+        rospy.loginfo('[%s] the bunch is at %s, %.3f m from the planned stem',
+                      label, np.round(stem, 3),
+                      np.linalg.norm(stem - expected))
+        return stem
 
     # ------------------------------------------------------------------
     # motions
@@ -508,7 +767,12 @@ class GrapeHarvestDemo(object):
     # plan
     # ------------------------------------------------------------------
     def bunch_waypoints(self, bunch):
-        """Gripper waypoints in the world frame for one bunch."""
+        """Gripper waypoints in the world frame for one bunch.
+
+        The body stops at ``standoff``, ``arm_reach`` short of the stem; the
+        arm covers the rest, so the flight never has to put the gripper on the
+        stem itself.
+        """
         m = self.motion
         stem = self.to_world(bunch['stem'])
         heading = self.heading()
@@ -518,7 +782,7 @@ class GrapeHarvestDemo(object):
         release = crate_bottom + up * m['release_height']
         return {
             'pregrasp': stem - m['approach_distance'] * heading,
-            'grasp': stem,
+            'standoff': stem - m['arm_reach'] * heading,
             'retreat': stem - m['retreat_distance'] * heading
             + m['lift_height'] * up,
             'above_crate': release + m['crate_clearance'] * up,
@@ -526,13 +790,13 @@ class GrapeHarvestDemo(object):
         }
 
     def print_plan(self, bunches):
-        grasp = self.arm_pose('grasp_arm_pose')
         release = self.arm_pose('release_arm_pose')
         for index, bunch in bunches:
             waypoints = self.bunch_waypoints(bunch)
-            rospy.loginfo('bunch %d (%s):', index, bunch['name'])
+            rospy.loginfo('bunch %d (%s): stem %s', index, bunch['name'],
+                          np.round(self.to_world(bunch['stem']), 3))
             for name, tcp in waypoints.items():
-                pose = release if name == 'release' else grasp
+                pose = release if name == 'release' else self.waiting_pose
                 rospy.loginfo('  %-12s gripper %s CoG %s', name,
                               np.round(tcp, 3),
                               np.round(self.cog_target(tcp, pose), 3))
@@ -541,21 +805,24 @@ class GrapeHarvestDemo(object):
         m = self.motion
         label = 'bunch {} {}'.format(index, bunch['name'])
         waypoints = self.bunch_waypoints(bunch)
-        grasp_pose = self.arm_pose('grasp_arm_pose')
         release_pose = self.arm_pose('release_arm_pose')
 
-        self.move_arm(label, grasp_pose)
+        self.move_arm(label, self.waiting_pose)
         self.open_gripper(label)
-        self.fly_tcp(label + ' pregrasp', waypoints['pregrasp'], grasp_pose)
-        # line up in front of the bunch, so that the approach is straight
-        self.fly_tcp(label + ' pregrasp', waypoints['pregrasp'], grasp_pose,
-                     precise=True)
-        self.fly_tcp(label + ' grasp', waypoints['grasp'], grasp_pose,
-                     precise=True)
+        self.fly_tcp(label + ' pregrasp', waypoints['pregrasp'],
+                     self.waiting_pose)
+        # line up in front of the bunch, so that the arm reaches straight out
+        self.fly_tcp(label + ' standoff', waypoints['standoff'],
+                     self.waiting_pose, precise=True)
+        # from here the body stays where it is and the arm does the rest
+        stem = self.refine_stem(label, bunch['stem'])
+        self.reach_with_arm(label, self.to_world(stem))
         self.close_gripper(label)
-        self.fly_tcp(label + ' retreat', waypoints['retreat'], grasp_pose)
+        self.move_arm(label + ' fold', self.waiting_pose)
+        self.fly_tcp(label + ' retreat', waypoints['retreat'],
+                     self.waiting_pose)
         self.fly_tcp(label + ' above crate', waypoints['above_crate'],
-                     grasp_pose)
+                     self.waiting_pose)
         self.move_arm(label, release_pose)
         self.fly_tcp(label + ' release', waypoints['release'], release_pose,
                      precise=True)
@@ -563,7 +830,7 @@ class GrapeHarvestDemo(object):
         rospy.sleep(m['hold_time'])
         self.fly_tcp(label + ' above crate', waypoints['above_crate'],
                      release_pose)
-        self.move_arm(label, grasp_pose)
+        self.move_arm(label, self.waiting_pose)
 
     def run(self, bunches):
         ri = self.ri
@@ -597,6 +864,7 @@ def main():
     try:
         demo = GrapeHarvestDemo(ri, config)
         demo.set_field_frame(args.field_frame)
+        demo.waiting_pose = demo.waiting_arm_pose()
         if args.targets == 'detect':
             all_bunches = demo.detect_bunches()
         else:
