@@ -97,8 +97,12 @@ class GrapeDetector(object):
         self.min_rate = rospy.get_param('~min_interval', 0.0)
         self.last_stamp = None
 
-        device = rospy.get_param('~device', 'cuda:0')
+        device = rospy.get_param('~device', 'auto')
+        import torch
         from ultralytics import YOLO
+        if device == 'auto':
+            # the venv has a cpu-only torch on a machine built without a gpu
+            device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         self.model = YOLO(model_path)
         self.model.set_classes(list(classes))
         try:

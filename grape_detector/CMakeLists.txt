@@ -15,8 +15,18 @@ if(PYTHON_VERSION_STRING VERSION_LESS GRAPE_DETECTOR_MIN_PYTHON)
   message(WARNING "python ${PYTHON_VERSION_STRING} < ${GRAPE_DETECTOR_MIN_PYTHON}: "
     "grape_detector is not installed")
 else()
+  # torch: the cuda build (requirements.txt, several GB of nvidia libraries) only on a machine with a gpu,
+  # the cpu build from the pytorch index (requirements-cpu.txt) otherwise. -DCATKIN_VIRTUALENV_CUDA=ON/OFF
+  # overrides the detection.
+  catkin_virtualenv_detect_cuda(GRAPE_DETECTOR_CUDA)
+  if(GRAPE_DETECTOR_CUDA)
+    set(torch_args)
+  else()
+    set(torch_args REQUIREMENTS_VARIANT cpu EXTRA_UV_ARGS --torch-backend cpu)
+  endif()
   catkin_generate_virtualenv(
     INPUT_REQUIREMENTS requirements.in
+    ${torch_args}
     EXTRA_UV_COMPILE_ARGS --universal --python-version ${GRAPE_DETECTOR_MIN_PYTHON}
     )
   catkin_install_python(PROGRAMS
@@ -30,6 +40,6 @@ install(DIRECTORY launch config
   USE_SOURCE_PERMISSIONS
   )
 
-install(FILES requirements.txt
+install(FILES requirements.txt requirements-cpu.txt
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
   )
