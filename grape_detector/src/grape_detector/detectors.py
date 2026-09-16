@@ -101,6 +101,13 @@ class AdlaDetector(object):
 
     def __init__(self, model_path, classes=None):
         from grape_detector.adla import AdlaModel
+        for path in (model_path, sidecar_path(model_path)):
+            if not os.path.exists(path):
+                raise IOError(
+                    '{} is missing; the models of the release are downloaded '
+                    'when grape_detector is built on a VIM4 (or with '
+                    '-DGRAPE_DETECTOR_DOWNLOAD_ADLA_MODELS=ON), others are '
+                    'made by scripts/export_adla_model.py'.format(path))
         with open(sidecar_path(model_path)) as f:
             meta = yaml.safe_load(f)
         self.classes = list(meta['classes'])
@@ -158,13 +165,40 @@ class AdlaDetector(object):
         return Detections(boxes, scores, labels)
 
 
+BACKENDS = ('ultralytics', 'adla')
+
+
+def resolve_backend(backend):
+    """Return the backend to run with.
+
+    Parameters
+    ----------
+    backend : str
+        ``auto``, ``ultralytics`` or ``adla``. ``auto`` is ``adla`` on a
+        machine with the NPU of a Khadas VIM4 and its runtime, and
+        ``ultralytics`` otherwise.
+
+    Returns
+    -------
+    str
+        ``ultralytics`` or ``adla``.
+    """
+    if backend == 'auto':
+        from grape_detector import adla
+        return 'adla' if adla.available() else 'ultralytics'
+    if backend not in BACKENDS:
+        raise ValueError('unknown backend {}, choose auto or one of {}'.format(
+            backend, BACKENDS))
+    return backend
+
+
 def create_detector(backend, model_path, classes, device):
     """Return the detector of a backend.
 
     Parameters
     ----------
     backend : str
-        ``ultralytics`` or ``adla``.
+        ``ultralytics`` or ``adla``, see ``resolve_backend``.
     model_path : str
         Weights of the model.
     classes : list of str
@@ -176,5 +210,5 @@ def create_detector(backend, model_path, classes, device):
         return UltralyticsDetector(model_path, classes, device)
     if backend == 'adla':
         return AdlaDetector(model_path, classes)
-    raise ValueError(
-        'unknown backend {}, choose ultralytics or adla'.format(backend))
+    raise ValueError('unknown backend {}, choose one of {}'.format(
+        backend, BACKENDS))

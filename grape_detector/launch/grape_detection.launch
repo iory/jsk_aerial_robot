@@ -12,12 +12,12 @@
   <arg name="manager" default="grape_detection_manager" />
   <!-- auto: the gpu when torch sees one (the venv is built with a cuda torch only on a machine with a gpu), else the cpu -->
   <arg name="device" default="auto" />
-  <!-- ultralytics: model is YOLO-World or YOLOE weights (.pt), run with torch on the device.
-       adla: model is an .adla made by scripts/export_adla_model.py, run on the NPU of a Khadas VIM4;
-       the default is downloaded into models/ when the package is built on the VIM4. -->
-  <arg name="backend" default="ultralytics" />
-  <arg name="model"
-       default="$(eval find('grape_detector') + '/models/yoloe-v8l_640_int8.adla' if arg('backend') == 'adla' else 'yolov8x-worldv2.pt')" />
+  <!-- ultralytics: YOLO-World or YOLOE weights (.pt), run with torch on the device.
+       adla: an .adla made by scripts/export_adla_model.py, run on the NPU of a Khadas VIM4.
+       auto: adla on a machine with that NPU (the robot), ultralytics otherwise (gazebo). -->
+  <arg name="backend" default="auto" />
+  <!-- empty: the model of the backend in the config (ultralytics_model, adla_model) -->
+  <arg name="model" default="" />
   <!-- seconds between two detections; 0 runs on every image -->
   <arg name="min_interval" default="0.2" />
   <arg name="config" default="$(find grape_detector)/config/GrapeDetector.yaml" />

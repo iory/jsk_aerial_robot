@@ -9,6 +9,12 @@ The detector is open vocabulary: the classes are the prompts of
 * ``ultralytics``: YOLO-World or YOLOE with torch, on a gpu or the cpu.
 * ``adla``: a YOLOE converted to .adla by scripts/export_adla_model.py, on the
   NPU of a Khadas VIM4.
+* ``auto`` (default): ``adla`` on a machine with that NPU, ``ultralytics``
+  otherwise, so that the same launch runs in gazebo and on the robot.
+
+``~model`` is the model of the backend; if it is empty, ``~ultralytics_model``
+or ``~adla_model`` of the backend is used, the latter relative to models/ of
+this package.
 
 Published for each image:
 
@@ -24,9 +30,13 @@ node and jsk_pcl_ros/ClusterPointIndicesDecomposer, which turns the indices into
 jsk_recognition_msgs/BoundingBoxArray in the frame of the camera.
 """
 
+import os
+
 import cv2
 from grape_detector.detectors import create_detector
+from grape_detector.detectors import resolve_backend
 import numpy as np
+import rospkg
 import rospy
 from jsk_recognition_msgs.msg import ClassificationResult
 from jsk_recognition_msgs.msg import ClusterPointIndices
@@ -109,7 +119,6 @@ class GrapeDetector(object):
 
     def __init__(self):
         classes = rospy.get_param('~classes', ['a bunch of grapes'])
-        model_path = rospy.get_param('~model', 'yolov8x-worldv2.pt')
         self.conf = rospy.get_param('~conf', 0.05)
         self.iou = rospy.get_param('~iou', 0.5)
         self.max_detections = rospy.get_param('~max_detections', 20)
@@ -125,7 +134,11 @@ class GrapeDetector(object):
         self.min_rate = rospy.get_param('~min_interval', 0.0)
         self.last_stamp = None
 
-        backend = rospy.get_param('~backend', 'ultralytics')
+        requested = rospy.get_param('~backend', 'auto')
+        backend = resolve_backend(requested)
+        model_path = self.model_path(backend)
+        rospy.loginfo('[%s] backend %s (%s)', rospy.get_name(), backend,
+                      requested)
         self.detector = create_detector(
             backend, model_path, classes, rospy.get_param('~device', 'auto'))
         self.classes = self.detector.classes
@@ -147,6 +160,21 @@ class GrapeDetector(object):
         sync = message_filters.ApproximateTimeSynchronizer(
             [image_sub, depth_sub], queue_size, slop)
         sync.registerCallback(self.callback)
+
+    @staticmethod
+    def model_path(backend):
+        """Return ``~model``, or the default model of a backend."""
+        model_path = rospy.get_param('~model', '')
+        if model_path:
+            return model_path
+        if backend == 'adla':
+            model_path = rospy.get_param('~adla_model')
+            if not os.path.isabs(model_path):
+                model_path = os.path.join(
+                    rospkg.RosPack().get_path('grape_detector'), 'models',
+                    model_path)
+            return model_path
+        return rospy.get_param('~ultralytics_model')
 
     def callback(self, image_msg, depth_msg):
         if self.min_rate > 0.0 and self.last_stamp is not None \

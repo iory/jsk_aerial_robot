@@ -7,6 +7,11 @@ classes:
   - "grapes"
   - "green grapes"
   - "white grapes"
+# the model of each backend when ~model is empty; ~backend auto picks adla on a machine with
+# the NPU of a Khadas VIM4, ultralytics otherwise
+ultralytics_model: yolov8x-worldv2.pt  # downloaded by ultralytics
+adla_model: yoloe-v8l_640_int8.adla    # in models/, downloaded when the package is built on a VIM4
+
 conf: 0.02        # score of a detection to keep it; the bunches in gazebo score 0.02-0.4
 iou: 0.5          # non maximum suppression
 max_detections: 20

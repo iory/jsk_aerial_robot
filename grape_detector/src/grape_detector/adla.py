@@ -8,8 +8,13 @@ https://github.com/khadas/vim4_npu_applications (include/nn_sdk.h).
 
 import ctypes
 import ctypes.util
+import os
 
 import numpy as np
+
+# the NPU of the board, made by its kernel driver
+DEVICE = '/dev/adla0'
+LIBRARY = 'nnsdk'
 
 MAX_NAME_LENGTH = 64
 OUTPUT_MAX_NUM = 32
@@ -100,7 +105,13 @@ class Output(ctypes.Structure):
                 ('out', OutputBuffer * OUTPUT_MAX_NUM)]
 
 
-def load_library(name='nnsdk'):
+def available():
+    """Whether this machine has the NPU and its runtime."""
+    return os.path.exists(DEVICE) \
+        and ctypes.util.find_library(LIBRARY) is not None
+
+
+def load_library(name=LIBRARY):
     """Return libnnsdk with the prototypes of the functions used here."""
     path = ctypes.util.find_library(name)
     if path is None:
