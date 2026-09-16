@@ -48,8 +48,13 @@
         args="load jsk_pcl/ClusterPointIndicesDecomposer $(arg manager)" output="screen">
     <remap from="~input" to="grape_detection/points" />
     <remap from="~target" to="grape_detector/output/cluster_indices" />
-    <param name="approximate_sync" value="true" />
-    <param name="queue_size" value="20" />
+    <!-- the indices carry the stamp of the depth image they were made from, which is the stamp of its
+         cloud: pair them exactly. With approximate_sync, about half of the indices were put on the cloud
+         one frame (33 ms) away, since they come some 0.1 s after it, and on a moving camera the pixels of
+         a bunch then fell on the canopy behind it, stretching the box over metres. queue_size covers the
+         latency of the detector (0.25 s on the NPU of a VIM4) at 30 Hz. -->
+    <param name="approximate_sync" value="false" />
+    <param name="queue_size" value="30" />
     <param name="align_boxes" value="false" />
     <param name="use_pca" value="false" />
     <param name="publish_tf" value="false" />
