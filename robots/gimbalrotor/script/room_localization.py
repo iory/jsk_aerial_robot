@@ -15,8 +15,8 @@ each axis is the one that correlates the two histograms best, refined to less th
 through the peak. It needs no initial guess and no iteration.
 
 A rectangular room repeats every 180 deg (and every 90 deg when it is nearly square), so all four turns are
-tried and the one whose cloud then covers the map best wins: the walls are symmetric but what stands inside
-the room is not. ``~yaw_hint`` only breaks a tie, and helps in a room that really is symmetric.
+tried and the one whose cloud then lies closest to the map wins, after each has been walked to its own best
+fit: the walls are symmetric but what stands inside the room is not. ``~yaw_hint`` only breaks a tie, and helps in a room that really is symmetric.
 
 When the match is wrong, or the room is too symmetric to decide, tell it where the robot is: the map is
 published on ``~map_cloud`` for rviz, and "2D Pose Estimate" of rviz (geometry_msgs/PoseWithCovarianceStamped
@@ -56,7 +56,8 @@ Parameters
     At most this many points of each cloud are used for the wall direction search, which is the
     expensive part (default: 40000).
 ~overlap_cell : float
-    Cell of the plan view grid the four turns are compared on [m] (default: 0.3).
+    Cell of the plan view distance map the four turns are compared on, and refined against [m]
+    (default: 0.1).
 ~map_cloud : str
     Topic the map is published on, latched, for rviz (default: ~map_cloud; empty to skip it).
 ~initial_pose : str
@@ -64,6 +65,9 @@ Parameters
     with that pose as the prior (default: /initialpose).
 ~prior_window : float
     How far the shift may be from the pose given that way [m] (default: 3.0).
+~tie : float
+    Turns whose mean distance to the map is within this of the best one are taken as fitting equally
+    well, and then ``~yaw_hint`` decides [m] (default: 0.01).
 
 Services
 --------
@@ -192,20 +196,89 @@ def best_shift(run_values, map_values, bin_size, margin=6.0, prior=None, window=
     return lag * bin_size, score
 
 
-def cell_keys(xy, cell):
-    """Plan view cells of the points, as one integer each."""
-    grid = np.floor(xy / cell).astype(np.int64)
-    return np.unique(grid[:, 0] * 100003 + grid[:, 1])
+class DistanceMap(object):
+    """Distance from any point of the plan view to the nearest point of the map.
+
+    A chamfer transform over the occupied cells, which is enough to tell a match that sits on the map
+    from one that is merely inside it, and to refine it: the mean distance of the run to the map is the
+    cost both of choosing between the four turns and of the refinement.
+    """
+
+    def __init__(self, xy, cell=0.1, truncate=1.0, margin=2.0):
+        self.cell = cell
+        self.truncate = truncate
+        self.origin = xy.min(0) - margin
+        size = np.ceil((xy.max(0) + margin - self.origin) / cell).astype(int) + 1
+        grid = np.full(size[::-1], np.inf)
+        index = np.floor((xy - self.origin) / cell).astype(int)
+        grid[index[:, 1], index[:, 0]] = 0.0
+        self.grid = self._chamfer(grid, cell)
+
+    @staticmethod
+    def _chamfer(grid, cell):
+        """Two pass chamfer distance, with the usual 1 and sqrt(2) steps."""
+        straight, diagonal = cell, cell * np.sqrt(2.0)
+        rows, cols = grid.shape
+        for i in range(rows):
+            row = grid[i]
+            if i > 0:
+                np.minimum(row, grid[i - 1] + straight, out=row)
+                np.minimum(row[1:], grid[i - 1][:-1] + diagonal, out=row[1:])
+                np.minimum(row[:-1], grid[i - 1][1:] + diagonal, out=row[:-1])
+            for j in range(1, cols):  # left to right inside the row
+                if row[j - 1] + straight < row[j]:
+                    row[j] = row[j - 1] + straight
+            for j in range(cols - 2, -1, -1):
+                if row[j + 1] + straight < row[j]:
+                    row[j] = row[j + 1] + straight
+        for i in range(rows - 2, -1, -1):
+            row = grid[i]
+            np.minimum(row, grid[i + 1] + straight, out=row)
+            np.minimum(row[1:], grid[i + 1][:-1] + diagonal, out=row[1:])
+            np.minimum(row[:-1], grid[i + 1][1:] + diagonal, out=row[:-1])
+            for j in range(cols - 2, -1, -1):
+                if row[j + 1] + straight < row[j]:
+                    row[j] = row[j + 1] + straight
+            for j in range(1, cols):
+                if row[j - 1] + straight < row[j]:
+                    row[j] = row[j - 1] + straight
+        return grid
+
+    def cost(self, xy):
+        """Mean distance of these points to the map, truncated so that outliers do not dominate."""
+        index = np.floor((xy - self.origin) / self.cell).astype(int)
+        inside = ((index[:, 0] >= 0) & (index[:, 0] < self.grid.shape[1]) &
+                  (index[:, 1] >= 0) & (index[:, 1] < self.grid.shape[0]))
+        distance = np.full(len(xy), self.truncate)
+        if inside.any():
+            distance[inside] = np.minimum(self.grid[index[inside, 1], index[inside, 0]], self.truncate)
+        return float(distance.mean())
 
 
-def overlap(map_keys, run_xy, shift, cell):
-    """Fraction of the cells of the run that the map also has: the rooms really lie on each other."""
-    keys = cell_keys(run_xy + shift, cell)
-    return float(np.isin(keys, map_keys).mean())
+def refine(distance_map, run_xy, shift, yaw, passes=3):
+    """Walk the transform to the smallest mean distance, over a shrinking step."""
+    step_xy, step_yaw = 0.2, np.radians(1.0)
+    best = distance_map.cost(run_xy.dot(rotation(yaw)) + shift)
+    for _ in range(passes):
+        improved = True
+        while improved:
+            improved = False
+            for delta in ([step_xy, 0.0], [-step_xy, 0.0], [0.0, step_xy], [0.0, -step_xy]):
+                candidate = shift + np.array(delta)
+                cost = distance_map.cost(run_xy.dot(rotation(yaw)) + candidate)
+                if cost < best:
+                    best, shift, improved = cost, candidate, True
+            for delta in (step_yaw, -step_yaw):
+                candidate = yaw + delta
+                cost = distance_map.cost(run_xy.dot(rotation(candidate)) + shift)
+                if cost < best:
+                    best, yaw, improved = cost, candidate, True
+        step_xy, step_yaw = step_xy / 4.0, step_yaw / 4.0
+    return shift, yaw, best
 
 
-def align(map_xy, run_xy, bin_size, angle_step, yaw_hint, max_points=40000, overlap_cell=0.3,
-          prior=None, prior_window=3.0):
+def align(map_xy, run_xy, bin_size, angle_step, yaw_hint, max_points=40000, overlap_cell=0.1,
+          prior=None, prior_window=3.0, tie=0.01):
     """Return (translation, yaw, score) that put the run cloud onto the map cloud.
 
     The wall directions give the rotation up to a multiple of 90 deg and the histograms give the shift;
@@ -214,13 +287,13 @@ def align(map_xy, run_xy, bin_size, angle_step, yaw_hint, max_points=40000, over
     """
     map_yaw = wall_direction(map_xy, bin_size, angle_step, max_points)
     run_yaw = wall_direction(run_xy, bin_size, angle_step, max_points)
-    map_keys = cell_keys(map_xy, overlap_cell)
+    distance_map = DistanceMap(map_xy, overlap_cell)
+    candidates = []
     turns = (0.0, np.pi / 2, np.pi, -np.pi / 2)
     if prior is not None:
         yaw_hint = prior[1]
         turns = min(turns, key=lambda extra: abs(float(np.arctan2(
             np.sin(map_yaw - run_yaw - extra - prior[1]), np.cos(map_yaw - run_yaw - extra - prior[1]))))),
-    best = None
     for extra in turns:
         yaw = float(np.arctan2(np.sin(map_yaw - run_yaw - extra), np.cos(map_yaw - run_yaw - extra)))
         rotated = run_xy.dot(rotation(yaw))
@@ -230,14 +303,18 @@ def align(map_xy, run_xy, bin_size, angle_step, yaw_hint, max_points=40000, over
         shift_y, _ = best_shift(rotated[:, 1], map_xy[:, 1], bin_size,
                                 prior=None if prior is None else prior[0][1], window=window)
         shift = np.array([shift_x, shift_y])
-        hint = abs(float(np.arctan2(np.sin(yaw - yaw_hint), np.cos(yaw - yaw_hint))))
-        score = overlap(map_keys, rotated, shift, overlap_cell) - 0.01 * hint
-        rospy.logdebug('[room localization] turn %5.1f deg: shift (%.2f, %.2f), overlap %.3f',
-                       np.degrees(yaw), shift[0], shift[1], score)
-        if best is None or score > best[0]:
-            best = (score, yaw, shift)
-    score, yaw, shift = best
-    return shift, yaw, score
+        shift, yaw, cost = refine(distance_map, run_xy, shift, yaw)
+        rospy.loginfo('[room localization] turn %6.1f deg: shift (%5.2f, %5.2f), mean distance %.3f m',
+                      np.degrees(yaw), shift[0], shift[1], cost)
+        candidates.append((cost, yaw, shift))
+
+    # the turn that fits best, and among those that fit as well the one closest to the hint: a room in
+    # which the robot sees only its own corner fits in more than one pose, and then the hint decides
+    lowest = min(cost for cost, _, _ in candidates)
+    close = [c for c in candidates if c[0] <= lowest + max(0.2 * lowest, tie)]
+    cost, yaw, shift = min(close, key=lambda c: abs(float(np.arctan2(
+        np.sin(c[1] - yaw_hint), np.cos(c[1] - yaw_hint)))))
+    return shift, yaw, cost
 
 
 def matrix_of_pose(position, orientation):
@@ -273,7 +350,8 @@ class RoomLocalization(object):
         self.bin = rospy.get_param('~bin', 0.05)
         self.angle_step = rospy.get_param('~angle_step', 0.05)
         self.max_points = rospy.get_param('~max_points', 40000)
-        self.overlap_cell = rospy.get_param('~overlap_cell', 0.3)
+        self.overlap_cell = rospy.get_param('~overlap_cell', 0.1)
+        self.tie = rospy.get_param('~tie', 0.01)
         self.prior_window = rospy.get_param('~prior_window', 3.0)
         self.map_xyz = voxel_downsample(load_pcd_xyz(rospy.get_param('~map')), self.voxel)
         self.map_xy = self.map_xyz[:, :2]
@@ -428,8 +506,9 @@ class RoomLocalization(object):
             return False
         start = rospy.Time.now()
         shift, yaw, score = align(self.map_xy, run_xy, self.bin, self.angle_step, self.yaw_hint,
-                                  self.max_points, self.overlap_cell, prior, self.prior_window)
-        rospy.loginfo('[room localization] %d run points, overlap %.3f, took %.1f s',
+                                  self.max_points, self.overlap_cell, prior, self.prior_window,
+                                  self.tie)
+        rospy.loginfo('[room localization] %d run points, mean distance to the map %.3f m, took %.1f s',
                       len(run_xy), score, (rospy.Time.now() - start).to_sec())
         rospy.loginfo('[room localization] %s -> %s: translation (%.3f, %.3f) m, rotation %.2f deg',
                       self.map_frame, self.odom_frame, shift[0], shift[1], np.degrees(yaw))
