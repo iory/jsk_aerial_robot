@@ -15,6 +15,8 @@
   <run_depend>sensor_msgs</run_depend>
   <run_depend>std_msgs</run_depend>
   <run_depend>jsk_recognition_msgs</run_depend>
+  <run_depend>message_filters</run_depend>
+  <run_depend>pcl_msgs</run_depend>
   <!-- the 2d detections become 3d boxes through the point cloud -->
   <run_depend>jsk_pcl_ros</run_depend>
   <run_depend>depth_image_proc</run_depend>
