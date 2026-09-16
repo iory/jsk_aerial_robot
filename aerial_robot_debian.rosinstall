@@ -62,4 +62,4 @@
 - git:
     local-name: catkin_virtualenv
     uri: https://github.com/iory/catkin_virtualenv.git
-    version: c97e74e
+    version: 68aa030
