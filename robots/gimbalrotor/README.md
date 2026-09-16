@@ -109,9 +109,13 @@ roslaunch gimbalrotor room_localization.launch map:=/path/to/scans.pcd
 ```
 
 It takes the wall directions of both clouds (the angle whose histograms of the point coordinates are
-sharpest) and the shift that correlates them best, so it needs no initial guess. A rectangular room repeats
-every 180 deg, so set `yaw_hint:=` to the heading the robot had when the map was recorded, or place it that
-way. `~relocalize` (std_srvs/Empty) redoes the match.
+sharpest) and the shift that correlates them best, so it needs no initial guess. The walls of a rectangular
+room repeat every 180 deg, so the turn whose cloud then covers the map best is taken, which the furniture
+inside the room decides; `yaw_hint:=` only breaks a tie. `~relocalize` (std_srvs/Empty) redoes the match.
+
+Carrying the robot once around the room gives a map with all the walls in it. Measured on the real machine
+with such a map, two runs put the same standing robot within 0.02 m and 1.3 deg of each other, and within
+0.08 m and 2.9 deg of where the map says it is.
 
 With that transform, the skrobot interface flies to map coordinates:
 

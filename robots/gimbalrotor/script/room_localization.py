@@ -15,8 +15,8 @@ each axis is the one that correlates the two histograms best, refined to less th
 through the peak. It needs no initial guess and no iteration.
 
 A rectangular room repeats every 180 deg (and every 90 deg when it is nearly square), so all four turns are
-tried and the one whose histograms correlate best wins, ``~yaw_hint`` breaking a tie: place the robot in
-roughly the heading it had when the map was recorded.
+tried and the one whose cloud then covers the map best wins: the walls are symmetric but what stands inside
+the room is not. ``~yaw_hint`` only breaks a tie, and helps in a room that really is symmetric.
 
 Parameters
 ----------
@@ -47,6 +47,11 @@ Parameters
     Bin of the histograms [m] (default: 0.05).
 ~angle_step : float
     Step of the wall direction search [deg] (default: 0.05).
+~max_points : int
+    At most this many points of each cloud are used for the wall direction search, which is the
+    expensive part (default: 40000).
+~overlap_cell : float
+    Cell of the plan view grid the four turns are compared on [m] (default: 0.3).
 
 Services
 --------
@@ -129,8 +134,10 @@ def sharpness(values, bin_size):
     return float((hist ** 2).sum()) / max(float(len(values)) ** 2, 1e-9)
 
 
-def wall_direction(xy, bin_size, angle_step):
+def wall_direction(xy, bin_size, angle_step, max_points=40000):
     """The direction of the walls, within 0..90 deg: the angle whose histograms are sharpest."""
+    if len(xy) > max_points:
+        xy = xy[::int(np.ceil(len(xy) / float(max_points)))]
     best = None
     for angle in np.arange(0.0, 90.0, angle_step):
         yaw = np.radians(angle)
@@ -159,20 +166,41 @@ def best_shift(run_values, map_values, bin_size, margin=6.0):
     return lag * bin_size, score
 
 
-def align(map_xy, run_xy, bin_size, angle_step, yaw_hint):
-    """Return (translation, yaw, score) that put the run cloud onto the map cloud."""
-    map_yaw = wall_direction(map_xy, bin_size, angle_step)
-    run_yaw = wall_direction(run_xy, bin_size, angle_step)
+def cell_keys(xy, cell):
+    """Plan view cells of the points, as one integer each."""
+    grid = np.floor(xy / cell).astype(np.int64)
+    return np.unique(grid[:, 0] * 100003 + grid[:, 1])
+
+
+def overlap(map_keys, run_xy, shift, cell):
+    """Fraction of the cells of the run that the map also has: the rooms really lie on each other."""
+    keys = cell_keys(run_xy + shift, cell)
+    return float(np.isin(keys, map_keys).mean())
+
+
+def align(map_xy, run_xy, bin_size, angle_step, yaw_hint, max_points=40000, overlap_cell=0.3):
+    """Return (translation, yaw, score) that put the run cloud onto the map cloud.
+
+    The wall directions give the rotation up to a multiple of 90 deg and the histograms give the shift;
+    which of the four turns is the right one is decided by how much of the run then lies on the map,
+    since the inside of a room is not symmetric even when its walls are.
+    """
+    map_yaw = wall_direction(map_xy, bin_size, angle_step, max_points)
+    run_yaw = wall_direction(run_xy, bin_size, angle_step, max_points)
+    map_keys = cell_keys(map_xy, overlap_cell)
     best = None
     for extra in (0.0, np.pi / 2, np.pi, -np.pi / 2):
         yaw = float(np.arctan2(np.sin(map_yaw - run_yaw - extra), np.cos(map_yaw - run_yaw - extra)))
         rotated = run_xy.dot(rotation(yaw))
-        shift_x, score_x = best_shift(rotated[:, 0], map_xy[:, 0], bin_size)
-        shift_y, score_y = best_shift(rotated[:, 1], map_xy[:, 1], bin_size)
+        shift_x, _ = best_shift(rotated[:, 0], map_xy[:, 0], bin_size)
+        shift_y, _ = best_shift(rotated[:, 1], map_xy[:, 1], bin_size)
+        shift = np.array([shift_x, shift_y])
         hint = abs(float(np.arctan2(np.sin(yaw - yaw_hint), np.cos(yaw - yaw_hint))))
-        score = score_x + score_y - 0.05 * hint
+        score = overlap(map_keys, rotated, shift, overlap_cell) - 0.01 * hint
+        rospy.logdebug('[room localization] turn %5.1f deg: shift (%.2f, %.2f), overlap %.3f',
+                       np.degrees(yaw), shift[0], shift[1], score)
         if best is None or score > best[0]:
-            best = (score, yaw, np.array([shift_x, shift_y]))
+            best = (score, yaw, shift)
     score, yaw, shift = best
     return shift, yaw, score
 
@@ -200,6 +228,8 @@ class RoomLocalization(object):
         self.voxel = rospy.get_param('~voxel', 0.1)
         self.bin = rospy.get_param('~bin', 0.05)
         self.angle_step = rospy.get_param('~angle_step', 0.05)
+        self.max_points = rospy.get_param('~max_points', 40000)
+        self.overlap_cell = rospy.get_param('~overlap_cell', 0.3)
         self.map_xy = voxel_downsample(load_pcd_xyz(rospy.get_param('~map')), self.voxel)[:, :2]
         rospy.loginfo('[room localization] map: %d points after a %.2f m voxel', len(self.map_xy), self.voxel)
 
@@ -283,8 +313,9 @@ class RoomLocalization(object):
             rospy.logerr('[room localization] only %d points in the run cloud', len(run_xy))
             return False
         start = rospy.Time.now()
-        shift, yaw, score = align(self.map_xy, run_xy, self.bin, self.angle_step, self.yaw_hint)
-        rospy.loginfo('[room localization] %d run points, match score %.3f, took %.1f s',
+        shift, yaw, score = align(self.map_xy, run_xy, self.bin, self.angle_step, self.yaw_hint,
+                                  self.max_points, self.overlap_cell)
+        rospy.loginfo('[room localization] %d run points, overlap %.3f, took %.1f s',
                       len(run_xy), score, (rospy.Time.now() - start).to_sec())
         rospy.loginfo('[room localization] %s -> %s: translation (%.3f, %.3f) m, rotation %.2f deg',
                       self.map_frame, self.odom_frame, shift[0], shift[1], np.degrees(yaw))
