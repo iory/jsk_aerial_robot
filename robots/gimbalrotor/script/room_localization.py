@@ -18,6 +18,11 @@ A rectangular room repeats every 180 deg (and every 90 deg when it is nearly squ
 tried and the one whose cloud then covers the map best wins: the walls are symmetric but what stands inside
 the room is not. ``~yaw_hint`` only breaks a tie, and helps in a room that really is symmetric.
 
+When the match is wrong, or the room is too symmetric to decide, tell it where the robot is: the map is
+published on ``~map_cloud`` for rviz, and "2D Pose Estimate" of rviz (geometry_msgs/PoseWithCovarianceStamped
+on ``~initial_pose``) starts a new match that keeps the turn closest to that pose and the shift within
+``~prior_window`` of it, like the initial pose of a 2D localization.
+
 Parameters
 ----------
 ~map : str
@@ -52,6 +57,13 @@ Parameters
     expensive part (default: 40000).
 ~overlap_cell : float
     Cell of the plan view grid the four turns are compared on [m] (default: 0.3).
+~map_cloud : str
+    Topic the map is published on, latched, for rviz (default: ~map_cloud; empty to skip it).
+~initial_pose : str
+    Pose of the robot in the map frame, e.g. from "2D Pose Estimate" of rviz, which starts a new match
+    with that pose as the prior (default: /initialpose).
+~prior_window : float
+    How far the shift may be from the pose given that way [m] (default: 3.0).
 
 Services
 --------
@@ -65,9 +77,11 @@ import numpy as np
 import rospy
 import tf.transformations as tft
 import tf2_ros
+from geometry_msgs.msg import PoseWithCovarianceStamped
 from geometry_msgs.msg import TransformStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import PointField
 from std_srvs.srv import Empty
 from std_srvs.srv import EmptyResponse
 
@@ -148,21 +162,33 @@ def wall_direction(xy, bin_size, angle_step, max_points=40000):
     return best[1]
 
 
-def best_shift(run_values, map_values, bin_size, margin=6.0):
-    """The shift that lines the run histogram up with the map histogram, and how well they match."""
+def best_shift(run_values, map_values, bin_size, margin=6.0, prior=None, window=None):
+    """The shift that lines the run histogram up with the map histogram, and how well they match.
+
+    With a prior only the shifts within window of it are considered, so that a pose given by hand wins
+    over a wrong but sharper match elsewhere in the room.
+    """
     low = min(map_values.min(), run_values.min()) - margin
     high = max(map_values.max(), run_values.max()) + margin
     run_hist = histogram(run_values, low, high, bin_size)
     map_hist = histogram(map_values, low, high, bin_size)
     correlation = np.correlate(map_hist, run_hist, mode='full')
+    if prior is not None and window is not None:
+        lags = (np.arange(len(correlation)) - (len(run_hist) - 1)) * bin_size
+        allowed = np.abs(lags - prior) <= window
+        if allowed.any():
+            correlation = np.where(allowed, correlation, -np.inf)
     peak = int(correlation.argmax())
     lag = float(peak - (len(run_hist) - 1))
     if 0 < peak < len(correlation) - 1:
         left, middle, right = correlation[peak - 1], correlation[peak], correlation[peak + 1]
         denominator = left - 2 * middle + right
-        if denominator != 0:
+        # the neighbours are not finite at the edge of the window of a prior
+        if np.isfinite([left, middle, right]).all() and denominator != 0:
             lag += 0.5 * float((left - right) / denominator)  # sub bin peak of the parabola
     score = float(correlation[peak] / (np.linalg.norm(map_hist) * np.linalg.norm(run_hist) + 1e-9))
+    if not np.isfinite(lag):
+        raise ValueError('the shift did not converge')
     return lag * bin_size, score
 
 
@@ -178,7 +204,8 @@ def overlap(map_keys, run_xy, shift, cell):
     return float(np.isin(keys, map_keys).mean())
 
 
-def align(map_xy, run_xy, bin_size, angle_step, yaw_hint, max_points=40000, overlap_cell=0.3):
+def align(map_xy, run_xy, bin_size, angle_step, yaw_hint, max_points=40000, overlap_cell=0.3,
+          prior=None, prior_window=3.0):
     """Return (translation, yaw, score) that put the run cloud onto the map cloud.
 
     The wall directions give the rotation up to a multiple of 90 deg and the histograms give the shift;
@@ -188,12 +215,20 @@ def align(map_xy, run_xy, bin_size, angle_step, yaw_hint, max_points=40000, over
     map_yaw = wall_direction(map_xy, bin_size, angle_step, max_points)
     run_yaw = wall_direction(run_xy, bin_size, angle_step, max_points)
     map_keys = cell_keys(map_xy, overlap_cell)
+    turns = (0.0, np.pi / 2, np.pi, -np.pi / 2)
+    if prior is not None:
+        yaw_hint = prior[1]
+        turns = min(turns, key=lambda extra: abs(float(np.arctan2(
+            np.sin(map_yaw - run_yaw - extra - prior[1]), np.cos(map_yaw - run_yaw - extra - prior[1]))))),
     best = None
-    for extra in (0.0, np.pi / 2, np.pi, -np.pi / 2):
+    for extra in turns:
         yaw = float(np.arctan2(np.sin(map_yaw - run_yaw - extra), np.cos(map_yaw - run_yaw - extra)))
         rotated = run_xy.dot(rotation(yaw))
-        shift_x, _ = best_shift(rotated[:, 0], map_xy[:, 0], bin_size)
-        shift_y, _ = best_shift(rotated[:, 1], map_xy[:, 1], bin_size)
+        window = prior_window if prior is not None else None
+        shift_x, _ = best_shift(rotated[:, 0], map_xy[:, 0], bin_size,
+                                prior=None if prior is None else prior[0][0], window=window)
+        shift_y, _ = best_shift(rotated[:, 1], map_xy[:, 1], bin_size,
+                                prior=None if prior is None else prior[0][1], window=window)
         shift = np.array([shift_x, shift_y])
         hint = abs(float(np.arctan2(np.sin(yaw - yaw_hint), np.cos(yaw - yaw_hint))))
         score = overlap(map_keys, rotated, shift, overlap_cell) - 0.01 * hint
@@ -210,6 +245,15 @@ def matrix_of_pose(position, orientation):
     matrix = tft.quaternion_matrix([orientation.x, orientation.y, orientation.z, orientation.w])
     matrix[:3, 3] = [position.x, position.y, position.z]
     return matrix
+
+
+def planar_of(matrix):
+    """The (x, y, heading) of a 4x4 transform, which is what a match in the plan view can give.
+
+    The heading is taken from the first column, so a sensor mounted upside down still gives the
+    heading of its x axis on the ground.
+    """
+    return matrix[:2, 3].copy(), float(np.arctan2(matrix[1, 0], matrix[0, 0]))
 
 
 def matrix_of_planar(shift, yaw):
@@ -230,7 +274,9 @@ class RoomLocalization(object):
         self.angle_step = rospy.get_param('~angle_step', 0.05)
         self.max_points = rospy.get_param('~max_points', 40000)
         self.overlap_cell = rospy.get_param('~overlap_cell', 0.3)
-        self.map_xy = voxel_downsample(load_pcd_xyz(rospy.get_param('~map')), self.voxel)[:, :2]
+        self.prior_window = rospy.get_param('~prior_window', 3.0)
+        self.map_xyz = voxel_downsample(load_pcd_xyz(rospy.get_param('~map')), self.voxel)
+        self.map_xy = self.map_xyz[:, :2]
         rospy.loginfo('[room localization] map: %d points after a %.2f m voxel', len(self.map_xy), self.voxel)
 
         self.world_frame = rospy.get_param('~world_frame', 'world')
@@ -252,7 +298,44 @@ class RoomLocalization(object):
                              self.robot_odom_callback, queue_size=1)
             rospy.Subscriber(rospy.get_param('~lio_odom', '/Odometry'), Odometry,
                              self.lio_odom_callback, queue_size=1)
+        rospy.Subscriber(rospy.get_param('~initial_pose', '/initialpose'), PoseWithCovarianceStamped,
+                         self.initial_pose_callback, queue_size=1)
+        map_cloud_topic = rospy.get_param('~map_cloud', '~map_cloud')
+        self.map_pub = None
+        if map_cloud_topic:
+            self.map_pub = rospy.Publisher(map_cloud_topic, PointCloud2, queue_size=1, latch=True)
+            self.map_pub.publish(self.map_cloud_msg())
         rospy.Service('~relocalize', Empty, self.relocalize)
+
+    def map_cloud_msg(self):
+        """The map as a PointCloud2 in the map frame, so that rviz can show where to put the robot."""
+        points = self.map_xyz.astype(np.float32)
+        msg = PointCloud2()
+        msg.header.frame_id = self.map_frame
+        msg.header.stamp = rospy.Time.now()
+        msg.height = 1
+        msg.width = len(points)
+        msg.fields = [PointField('x', 0, PointField.FLOAT32, 1),
+                      PointField('y', 4, PointField.FLOAT32, 1),
+                      PointField('z', 8, PointField.FLOAT32, 1)]
+        msg.point_step = 12
+        msg.row_step = 12 * len(points)
+        msg.is_dense = True
+        msg.data = points.tobytes()
+        return msg
+
+    def initial_pose_callback(self, msg):
+        """Match again with the pose a person gave, e.g. with "2D Pose Estimate" of rviz."""
+        if msg.header.frame_id.strip('/') != self.map_frame.strip('/'):
+            rospy.logwarn('[room localization] the initial pose is in %s, not in %s; set the fixed frame '
+                          'of rviz to %s', msg.header.frame_id, self.map_frame, self.map_frame)
+            return
+        position = msg.pose.pose.position
+        orientation = msg.pose.pose.orientation
+        yaw = tft.euler_from_quaternion([orientation.x, orientation.y, orientation.z, orientation.w])[2]
+        rospy.loginfo('[room localization] pose given: (%.2f, %.2f) m, %.1f deg in %s',
+                      position.x, position.y, np.degrees(yaw), self.map_frame)
+        self.localize(map_to_robot=(np.array([position.x, position.y]), float(yaw)))
 
     def robot_odom_callback(self, msg):
         self.robot_odom = msg
@@ -272,15 +355,10 @@ class RoomLocalization(object):
             rospy.logwarn('[room localization] no %s or %s yet, publishing only %s -> %s',
                           'robot odometry', 'lidar odometry', self.map_frame, self.odom_frame)
             return None
-        try:
-            baselink_to_lidar = self.tf_buffer.lookup_transform(
-                robot_odom.child_frame_id, self.lidar_frame, rospy.Time(0), rospy.Duration(2.0)).transform
-        except tf2_ros.TransformException as e:
-            rospy.logwarn('[room localization] no transform %s -> %s (%s)',
-                          robot_odom.child_frame_id, self.lidar_frame, e)
+        baselink_to_lidar = self.robot_to_lidar()
+        if baselink_to_lidar is None:
             return None
         world_to_baselink = matrix_of_pose(robot_odom.pose.pose.position, robot_odom.pose.pose.orientation)
-        baselink_to_lidar = matrix_of_pose(baselink_to_lidar.translation, baselink_to_lidar.rotation)
         odom_to_lidar = matrix_of_pose(lio_odom.pose.pose.position, lio_odom.pose.pose.orientation)
         world_to_lidar = world_to_baselink.dot(baselink_to_lidar)
         return map_to_odom.dot(odom_to_lidar).dot(np.linalg.inv(world_to_lidar))
@@ -304,7 +382,43 @@ class RoomLocalization(object):
             return None
         return np.concatenate(clouds)
 
-    def localize(self):
+    def prior_from_pose(self, map_to_robot):
+        """Turn a pose of the robot in the map frame into a prior of the map -> odom transform.
+
+        The robot is where the person said and the lidar odometry says where it is in its own frame, so
+        the two give the transform between the frames: map -> odom = (map -> robot) (odom -> robot)^-1.
+        The pose is the pose of the robot, so the odometry of the lidar is taken back to the frame of
+        the robot first, which matters when the lidar is not mounted level.
+        """
+        lio_odom = self.lio_odom
+        if lio_odom is None:
+            rospy.logwarn('[room localization] no lidar odometry yet, using the pose as the prior directly')
+            return map_to_robot
+        odom_to_robot = matrix_of_pose(lio_odom.pose.pose.position, lio_odom.pose.pose.orientation)
+        robot_to_lidar = self.robot_to_lidar()
+        if robot_to_lidar is not None:
+            odom_to_robot = odom_to_robot.dot(np.linalg.inv(robot_to_lidar))
+        shift, yaw = planar_of(odom_to_robot)
+        map_to_odom = matrix_of_planar(map_to_robot[0], map_to_robot[1]).dot(
+            np.linalg.inv(matrix_of_planar(shift, yaw)))
+        return planar_of(map_to_odom)
+
+    def robot_to_lidar(self):
+        """The lidar in the frame the robot odometry uses, from the robot model, or None."""
+        robot_odom = self.robot_odom
+        if robot_odom is None:
+            return None
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                robot_odom.child_frame_id, self.lidar_frame, rospy.Time(0), rospy.Duration(2.0)).transform
+        except tf2_ros.TransformException as e:
+            rospy.logwarn('[room localization] no transform %s -> %s (%s)',
+                          robot_odom.child_frame_id, self.lidar_frame, e)
+            return None
+        return matrix_of_pose(transform.translation, transform.rotation)
+
+    def localize(self, map_to_robot=None):
+        prior = None if map_to_robot is None else self.prior_from_pose(map_to_robot)
         xyz = self.collect()
         if xyz is None:
             return False
@@ -314,7 +428,7 @@ class RoomLocalization(object):
             return False
         start = rospy.Time.now()
         shift, yaw, score = align(self.map_xy, run_xy, self.bin, self.angle_step, self.yaw_hint,
-                                  self.max_points, self.overlap_cell)
+                                  self.max_points, self.overlap_cell, prior, self.prior_window)
         rospy.loginfo('[room localization] %d run points, overlap %.3f, took %.1f s',
                       len(run_xy), score, (rospy.Time.now() - start).to_sec())
         rospy.loginfo('[room localization] %s -> %s: translation (%.3f, %.3f) m, rotation %.2f deg',

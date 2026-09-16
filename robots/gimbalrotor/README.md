@@ -117,6 +117,16 @@ Carrying the robot once around the room gives a map with all the walls in it. Me
 with such a map, two runs put the same standing robot within 0.02 m and 1.3 deg of each other, and within
 0.08 m and 2.9 deg of where the map says it is.
 
+When the match is wrong, or the room is too symmetric to decide, point at the robot in rviz as in a 2D
+localization: `config/room.rviz` of gimbalrotor_remote shows the map (`~map_cloud` of the node) and has the
+"2D Pose Estimate" tool, and the pose it publishes starts a new match that keeps the turn closest to it and
+the shift within `~prior_window` (3 m) of it.
+
+```bash
+rosrun gimbalrotor_remote remote_rviz.sh <robot host> \
+    rviz_config:=$(rospack find gimbalrotor_remote)/config/room.rviz
+```
+
 With that transform, the skrobot interface flies to map coordinates:
 
 ```python

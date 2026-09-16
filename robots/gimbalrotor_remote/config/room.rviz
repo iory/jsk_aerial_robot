@@ -1,0 +1,67 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+  - Class: gimbalrotor_remote/FlightTeleopPanel
+    Name: FlightTeleopPanel
+    Robot Namespace: gimbalrotor
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz/Grid
+      Name: Grid
+      Enabled: true
+      Reference Frame: <Fixed Frame>
+    # the map of room_localization; it also takes the pose of the 2D Pose Estimate tool
+    - Class: rviz/PointCloud2
+      Name: RoomMap
+      Enabled: true
+      Topic: /room_localization/map_cloud
+      Style: Points
+      Size (Pixels): 2
+      Decay Time: 0
+      Color Transformer: AxisColor
+      Axis: Z
+      Queue Size: 2
+    - Class: rviz/RobotModel
+      Name: RobotModel
+      Enabled: true
+      Robot Description: /gimbalrotor/robot_description
+      TF Prefix: gimbalrotor
+      Visual Enabled: true
+      Collision Enabled: false
+    # livox: roslaunch livox_ros_driver2 msg_MID360.launch xfer_format:=0 msg_frame_id:=gimbalrotor/lidar_imu
+    - Class: rviz/PointCloud2
+      Name: LivoxScan
+      Enabled: false
+      Topic: /livox/lidar
+      Style: Points
+      Size (Pixels): 2
+      Decay Time: 0
+      Color Transformer: FlatColor
+      Color: 255; 170; 50
+      Queue Size: 2
+      Unreliable: true
+    - Class: rviz/TF
+      Name: TF
+      Enabled: false
+  Global Options:
+    Fixed Frame: map
+    Background Color: 48; 48; 48
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+    - Class: rviz/MoveCamera
+    # drag on the robot to tell room_localization where it is, as in a 2D localization
+    - Class: rviz/SetInitialPose
+      Topic: /initialpose
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 12
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Pitch: 0.8
+      Yaw: 0.8
+      Target Frame: <Fixed Frame>
