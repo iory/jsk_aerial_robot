@@ -44,19 +44,20 @@ Arguments of `remote_rviz.launch`: `robot_ns` (default `gimbalrotor`), `arm_cont
 
 ## displays
 
-Besides the robot model, `config/arm.rviz` has two point cloud displays:
+`rosrun gimbalrotor_remote remote_rviz.sh <robot host>` opens `config/room.rviz`, the view for the real
+robot, in which everything can be watched and operated: both panels, the room map of room_localization,
+the robot model, the lidar cloud and the camera cloud, and the "2D Pose Estimate" tool. `remote_rviz.launch`
+alone opens `config/arm.rviz` (no map, world frame), which suits gazebo; `rviz_config:=` picks either.
 
-- `LivoxScan` (`/livox/lidar`, on): the live scan. The driver has to publish PointCloud2 in the frame of the
-  robot model, i.e. start it as
-  `roslaunch livox_ros_driver2 msg_MID360.launch xfer_format:=0 msg_frame_id:=gimbalrotor/lidar_imu`
-  (the default `xfer_format:=1` is a livox CustomMsg, which rviz cannot show). It is about 3.8 MB/s over the
-  network, so turn it off when it is not needed.
+- `LidarCloud` (`/gimbalrotor/lio/cloud`, on): the fast_lio cloud. The robot thins it to `lio_cloud_rate`
+  of bringup (2 Hz; fast_lio publishes 10 Hz, 1.6 MB/s) with a lazy `topic_tools/throttle`, so it is sent
+  only while the display is enabled; measured 0.29 MB/s over the network and 0.5 % of one onboard core. It
+  lies on the room map when the localization is right. (`/livox/lidar` of the driver is the livox
+  CustomMsg fast_lio needs, which rviz cannot show.)
 - `CameraCloud` (`rviz/DepthCloud`, on, in `arm.rviz` and `room.rviz`): the D435 cloud, made by rviz on
   this PC from the compressed images of the robot (`compressedDepth` with RVL for the depth, `compressed`
   JPEG for the color). The robot compresses and sends them only while the display is enabled; measured on
   the real machine it costs about 18 % of one onboard core and about 1.4 MB/s at the rates below.
-- `FastLioMap` (`/cloud_registered`, off): the map of fast_lio. Its frame `camera_init` is where the robot
-  started, and nothing connects it to the fixed frame yet, so enable it only with such a transform.
 
 ## camera images and cloud on this PC
 
@@ -87,17 +88,11 @@ network is tight.
 
 ## config/room.rviz
 
-The other config is for flying in a room whose map was recorded before: it shows the map of
-`gimbalrotor/script/room_localization.py` (`/room_localization/map_cloud`) in the `map` frame, the robot
-model and the flight teleop panel, and it has the "2D Pose Estimate" tool of rviz. Dragging that tool on the
-robot tells room_localization where the robot is, which is how a wrong match (a rectangular room looks the
-same turned by 180 deg) is corrected, as in a 2D localization.
-
-```bash
-roslaunch gimbalrotor_remote remote_rviz.launch rviz_config:=$(rospack find gimbalrotor_remote)/config/room.rviz
-```
-
-The robot model appears once the match has published `map -> world`.
+The default of `remote_rviz.sh`, for the real robot in a room whose map was recorded before. Its fixed frame
+is `map`, so it needs `gimbalrotor/script/room_localization.py` running; the "2D Pose Estimate" tool tells
+room_localization where the robot is, which is how a wrong match (a rectangular room looks the same turned
+by 180 deg) is corrected, as in a 2D localization. The robot model follows `map -> camera_init` of the
+lidar odometry, or `map -> world` once the flight stack runs.
 
 ## ArmControlPanel
 

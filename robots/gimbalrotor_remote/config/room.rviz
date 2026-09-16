@@ -1,6 +1,11 @@
 Panels:
   - Class: rviz/Displays
     Name: Displays
+  - Class: gimbalrotor_remote/ArmControlPanel
+    Name: ArmControlPanel
+    Robot Namespace: gimbalrotor
+    Arm Controller Namespace: arm/arm_controller
+    Torque Service Namespace: arm_torque
   - Class: gimbalrotor_remote/FlightTeleopPanel
     Name: FlightTeleopPanel
     Robot Namespace: gimbalrotor
@@ -21,6 +26,7 @@ Visualization Manager:
       Decay Time: 0
       Color Transformer: AxisColor
       Axis: Z
+      Alpha: 0.5
       Queue Size: 2
     - Class: rviz/RobotModel
       Name: RobotModel
@@ -29,18 +35,18 @@ Visualization Manager:
       TF Prefix: gimbalrotor
       Visual Enabled: true
       Collision Enabled: false
-    # livox: roslaunch livox_ros_driver2 msg_MID360.launch xfer_format:=0 msg_frame_id:=gimbalrotor/lidar_imu
+    # the fast_lio cloud, thinned on the robot (lio_cloud_rate of bringup, 2 Hz) and sent only while this
+    # display is enabled; it lies on the room map when the localization is right
     - Class: rviz/PointCloud2
-      Name: LivoxScan
-      Enabled: false
-      Topic: /livox/lidar
+      Name: LidarCloud
+      Enabled: true
+      Topic: /gimbalrotor/lio/cloud
       Style: Points
-      Size (Pixels): 2
-      Decay Time: 0
+      Size (Pixels): 3
+      Decay Time: 1
       Color Transformer: FlatColor
       Color: 255; 170; 50
       Queue Size: 2
-      Unreliable: true
     # the d435 cloud, made here from the compressed images (RVL depth, JPEG color); the robot only
     # compresses and sends them while this display is enabled
     - Class: rviz/DepthCloud
@@ -72,11 +78,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 12
+      Distance: 8
       Focal Point:
         X: 0
         Y: 0
         Z: 0
       Pitch: 0.8
       Yaw: 0.8
-      Target Frame: <Fixed Frame>
+      Target Frame: gimbalrotor/root
+# arm control panel on the left, flight teleop panel on the right
+Window Geometry:
+  Width: 1900
+  Height: 1150
+  QMainWindow State: 000000ff00000000fd00000002000000000000029100000420fc0200000002fb000000100044006900730070006c006100790073010000003f00000129000000cc00fffffffb0000001e00410072006d0043006f006e00740072006f006c00500061006e0065006c010000016e000002f10000020600ffffff00000001000001ed00000420fc0200000001fb000000220046006c006900670068007400540065006c0065006f007000500061006e0065006c010000003f000004200000015e00ffffff000002e20000042000000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000

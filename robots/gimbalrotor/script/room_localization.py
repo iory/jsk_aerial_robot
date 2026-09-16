@@ -52,6 +52,12 @@ Parameters
     ``map -> camera_init`` carries that tilt. This assumes the robot stands level when fast_lio starts.
 ~mount_roll, ~mount_pitch : float
     Roll and pitch of the lidar in ``~base_frame`` [deg], used instead of the robot model when set.
+~floor_at_zero : bool
+    Put the floor of the map (its lowest horizontal plane) at z = 0 of the map frame (default: true).
+
+The height is matched too: the height histogram of the run, after the plan view match, is lined up with
+that of the map (the floor and the ceiling are its peaks), since the lidar need not be at the same height
+at the start of the run as at the start of the recording.
 ~duration : float
     Cloud is collected for this long before the match [s] (default: 5.0).
 ~yaw_hint : float
@@ -370,11 +376,26 @@ def level_rotation(roll, pitch):
     return tft.euler_matrix(roll, pitch, 0.0, 'sxyz')
 
 
-def matrix_of_planar(shift, yaw):
+def matrix_of_planar(shift, yaw, height=0.0):
     matrix = tft.rotation_matrix(yaw, (0, 0, 1))
     matrix[0, 3] = shift[0]
     matrix[1, 3] = shift[1]
+    matrix[2, 3] = height
     return matrix
+
+
+def floor_height(z, bin_size=0.02, strength=0.3):
+    """Height of the floor: the lowest of the horizontal planes of a level cloud.
+
+    A horizontal plane is a peak of the height histogram; the lowest peak of at least ``strength`` of the
+    highest one is taken, so that the ceiling or a table top, which can be bigger, is not.
+    """
+    edges = np.arange(z.min() - bin_size, z.max() + 2 * bin_size, bin_size)
+    hist, _ = np.histogram(z, bins=edges)
+    hist = np.convolve(hist.astype(np.float64), np.ones(5) / 5.0, mode='same')
+    peaks = [i for i in range(1, len(hist) - 1)
+             if hist[i] >= hist[i - 1] and hist[i] >= hist[i + 1] and hist[i] >= strength * hist.max()]
+    return float(edges[peaks[0]] + bin_size / 2.0)
 
 
 class RoomLocalization(object):
@@ -408,6 +429,12 @@ class RoomLocalization(object):
         self.level = self.mount_level()
         raw = load_pcd_xyz(rospy.get_param('~map'))
         self.map_xyz = voxel_downsample(self.to_level(raw), self.voxel)
+        self.map_floor = floor_height(self.map_xyz[:, 2])
+        if rospy.get_param('~floor_at_zero', True):
+            self.map_xyz[:, 2] -= self.map_floor
+            rospy.loginfo('[room localization] map floor at %.2f m of the recording, moved to z = 0',
+                          self.map_floor)
+        self.height = 0.0  # of the last match, for a pose given before the next one
         self.map_xy = self.map_xyz[:, :2]
         rospy.loginfo('[room localization] map: %d points after a %.2f m voxel, height %.2f .. %.2f m',
                       len(self.map_xy), self.voxel, self.map_xyz[:, 2].min(), self.map_xyz[:, 2].max())
@@ -488,7 +515,7 @@ class RoomLocalization(object):
                       position.x, position.y, np.degrees(yaw), self.map_frame)
         prior = self.prior_from_pose((np.array([position.x, position.y]), float(yaw)))
         # put the robot where it was pointed at right away, then let the match move it to where it fits
-        self.publish(matrix_of_planar(prior[0], prior[1]).dot(self.level), 'the given pose')
+        self.publish(matrix_of_planar(prior[0], prior[1], self.height).dot(self.level), 'the given pose')
         self.localize(prior=prior)
 
     def robot_odom_callback(self, msg):
@@ -582,7 +609,8 @@ class RoomLocalization(object):
         xyz = self.collect()
         if xyz is None:
             return False
-        run_xy = voxel_downsample(self.to_level(xyz), self.voxel)[:, :2]
+        run_xyz = voxel_downsample(self.to_level(xyz), self.voxel)
+        run_xy = run_xyz[:, :2]
         if len(run_xy) < 500:
             rospy.logerr('[room localization] only %d points in the run cloud', len(run_xy))
             return False
@@ -593,7 +621,10 @@ class RoomLocalization(object):
         rospy.loginfo('[room localization] %d run points, mean distance to the map %.3f m, took %.1f s',
                       len(run_xy), score, (rospy.Time.now() - start).to_sec())
         # the match is between level frames; camera_init keeps the tilt of the lidar
-        self.publish(matrix_of_planar(shift, yaw).dot(self.level), 'the match')
+        # the height: line the horizontal planes of the run up with those of the map
+        self.height, _ = best_shift(run_xyz[:, 2], self.map_xyz[:, 2], 0.02, margin=3.0)
+        rospy.loginfo('[room localization] height of camera_init in the map: %.3f m', self.height)
+        self.publish(matrix_of_planar(shift, yaw, self.height).dot(self.level), 'the match')
         return True
 
     def publish(self, map_to_odom, source):

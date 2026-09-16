@@ -1,5 +1,6 @@
 #!/bin/bash
-# Launch rviz with the arm control panel on this PC, connected to the ROS master of the robot.
+# Launch rviz with the arm control and flight teleop panels on this PC, connected to the ROS master of
+# the robot, showing the room map, the lidar and camera clouds (config/room.rviz by default).
 #
 # usage: rosrun gimbalrotor_remote remote_rviz.sh ROBOT_HOST [roslaunch args...]
 #
@@ -61,4 +62,9 @@ if unreachable:
           + '\nstart the robot launch with ROS_IP=<robot ip> exported, or add the robot hostname to /etc/hosts')
 EOF
 
+# the real robot view: room map, both clouds and both panels, unless another config is given
+case " $* " in
+  *" rviz_config:="*) ;;
+  *) set -- "$@" "rviz_config:=$(rospack find gimbalrotor_remote)/config/room.rviz" ;;
+esac
 exec roslaunch gimbalrotor_remote remote_rviz.launch "$@"

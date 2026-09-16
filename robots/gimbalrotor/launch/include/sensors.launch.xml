@@ -4,6 +4,8 @@
   <arg name="simulation" default="false" />
   <arg name="robot_ns" default="gimbalrotor" />
   <arg name="camera" default="false" />
+  <!-- rate of the lidar odometry cloud sent to the operator PC [Hz]; fast_lio publishes 10 Hz, 1.6 MB/s -->
+  <arg name="lio_cloud_rate" default="2.0" />
 
   <group ns="$(arg robot_ns)">
 
@@ -34,6 +36,13 @@
           <arg name="depth_height" value="480" />
           <arg name="depth_fps" value="30" />
         </include>
+
+        <!-- the lidar odometry cloud for the operator PC, thinned to lio_cloud_rate. lazy: it subscribes
+             only while someone watches, and it copies the messages without decoding them -->
+        <node pkg="topic_tools" type="throttle" name="lio_cloud_throttle"
+              args="messages /cloud_registered $(arg lio_cloud_rate) lio/cloud">
+          <param name="lazy" value="true" />
+        </node>
 
         <!-- mocap -->
         <include file="$(find aerial_robot_base)/launch/external_module/mocap.launch" />

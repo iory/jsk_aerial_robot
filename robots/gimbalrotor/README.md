@@ -87,6 +87,8 @@ The onboard PC reaches the LiDAR over Ethernet and the depth camera over USB.
 - The LiDAR and the onboard PC must hold the addresses of `livox_ros_driver2/config/MID360_config.json`.
   Otherwise the driver still receives the points but drops them with
   `Storage point data failed, can not get index` and publishes nothing.
+- The fast_lio cloud goes to the operator PC as `<robot_ns>/lio/cloud`, thinned to `lio_cloud_rate:=`
+  (2 Hz) and only while someone subscribes.
 - The D435 cloud is not made on board: it is made on the operator PC from the compressed images, see
   [gimbalrotor_remote](../gimbalrotor_remote/README.md).
 - Connect the D435 to a USB 3 port: on USB 2 (`connected using a 2.1 port` in its log) the aligned depth
@@ -123,9 +125,11 @@ with such a map, two runs put the same standing robot within 0.02 m and 1.3 deg 
 
 The map frame is level even though the lidar of grape_with_arm is mounted upside down: the roll and pitch of
 the lidar in the robot model (`~base_frame` -> `~lidar_frame`) are taken off the recorded map and the run
-cloud, and `map -> camera_init` carries them (roll 180 deg here). Its origin is where the lidar was when the
-map was recorded, so the floor is below z = 0. This assumes the robot stands level when fast_lio starts, and
-needs the robot model (robot_description and its tf) to be running.
+cloud, and `map -> camera_init` carries them (roll 180 deg here). The floor of the map (its lowest horizontal
+plane) is at z = 0 (`~floor_at_zero`), and the height of the run is matched too, by lining up the floors
+and ceilings of the two clouds, so the robot stands on the floor even when the lidar starts at another
+height than at the recording (on a desk, in a hand). This assumes the robot stands level when fast_lio
+starts, and needs the robot model (robot_description and its tf) to be running.
 
 When the match is wrong, or the room is too symmetric to decide, point at the robot in rviz as in a 2D
 localization: `config/room.rviz` of gimbalrotor_remote shows the map (`~map_cloud` of the node) and has the
@@ -135,8 +139,7 @@ given pose only decides between fits that are equally good (the same room turned
 roughly the right way; its position may be anywhere.
 
 ```bash
-rosrun gimbalrotor_remote remote_rviz.sh <robot host> \
-    rviz_config:=$(rospack find gimbalrotor_remote)/config/room.rviz
+rosrun gimbalrotor_remote remote_rviz.sh <robot host>   # opens config/room.rviz
 ```
 
 With that transform, the skrobot interface flies to map coordinates:
