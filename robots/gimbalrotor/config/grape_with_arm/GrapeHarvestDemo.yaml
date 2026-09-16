@@ -70,18 +70,18 @@ motion:
   # the gripper is lowered to release_height above the crate bottom from release_height + crate_clearance
   release_height: 0.5
   crate_clearance: 0.3
-  # The body stops arm_reach short of the stem and the arm does the last stretch, so that an error
-  # of the flight (and of the odometry, when the target is re-detected from the camera) is taken out
-  # by the arm instead of going into the grasp. The arm waits folded by arm_standoff, which leaves it
-  # room to reach forward, back, sideways and up or down.
-  arm_reach: 0.08           # [m] gripper short of the stem when the body stops
-  arm_standoff: 0.12        # [m] the waiting pose is this much short of the fully stretched arm
-  # With these two the arm waits with joint2 at -127 deg and reaches 0.16 m sideways, 0.10 m up and
-  # down and 0.04 m forward from the stem. The meshes of the arm stay 2.8 cm apart at the waiting pose
-  # (joint3 from the pipe); folding further closes that quickly: 1.2 cm at arm_standoff 0.14
-  # (-144 deg), and the links touch from about -160 deg. A target further than max_arm_correction
-  # from the waiting pose is refused, and so is a pose that folds a joint further than max_arm_angle,
-  # since the demo has no collision model of the arm.
+  # The robot flies with the arm folded and stops where the arm, reaching out, holds the stem; the
+  # arm covers the last stretch, so that an error of the flight (and of the odometry, when the
+  # target is re-detected from the camera) is taken out by the arm instead of going into the grasp.
+  # The arm folds at its three yaw joints (root, second and third) into a Z; their sum is 0, so the
+  # gripper keeps pointing forward. In this pose the arm is 3.0 cm from the body and the legs and
+  # below the rotors. From it, the inverse kinematics of scikit-robot reaches the stem.
+  waiting_arm_pose: {arm_joint1_joint1: 1.05, arm_joint2_joint1: -2.1, arm_joint3_joint1: 1.05}
+  # where the body is placed: the gripper on the stem is this much short of the stretched arm, which
+  # leaves the arm room to reach 0.12 m sideways, 0.08 m up and down and 0.04 m forward
+  arm_reach_margin: 0.05    # [m]
+  # a stem further than this from where the body was placed for is refused, and so is a pose that
+  # folds a joint further than max_arm_angle (the demo has no collision model of the arm)
   max_arm_correction: 0.14  # [m]
   max_arm_angle: 2.35       # [rad] 135 deg
   # the servos do not land exactly on the angles they are given, so the gripper is measured from
