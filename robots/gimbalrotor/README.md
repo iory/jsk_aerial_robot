@@ -82,11 +82,15 @@ The onboard PC reaches the LiDAR over Ethernet and the depth camera over USB.
 | sensor | driver | topics |
 | --- | --- | --- |
 | Livox MID360 | `roslaunch livox_ros_driver2 msg_MID360.launch` (commented out in `launch/include/sensors.launch.xml`) | `/livox/lidar` 10 Hz, `/livox/imu` 200 Hz |
-| Intel RealSense D435 | `launch/include/sensors.launch.xml` of `bringup.launch`, `camera:=false` to skip it | `<robot_ns>/camera/color/image_raw`, `.../camera/depth/image_rect_raw`; gazebo publishes the same topics |
+| Intel RealSense D435 | `launch/include/sensors.launch.xml` of `bringup.launch`, `camera:=false` to skip it | `<robot_ns>/camera/color/image_raw`, `.../aligned_depth_to_color/image_raw`, with `compressed` (JPEG) and `compressedDepth` (RVL); gazebo publishes the same topics |
 
 - The LiDAR and the onboard PC must hold the addresses of `livox_ros_driver2/config/MID360_config.json`.
   Otherwise the driver still receives the points but drops them with
   `Storage point data failed, can not get index` and publishes nothing.
+- The D435 cloud is not made on board: it is made on the operator PC from the compressed images, see
+  [gimbalrotor_remote](../gimbalrotor_remote/README.md).
+- Connect the D435 to a USB 3 port: on USB 2 (`connected using a 2.1 port` in its log) the aligned depth
+  comes at about 4.5 Hz only.
 - `Mipi device capability could not be grabbed` in the RealSense log is harmless: it looks for MIPI cameras
   and the D435 is on USB.
 

@@ -23,6 +23,21 @@ Visualization Manager:
       TF Prefix: gimbalrotor
       Visual Enabled: true
       Collision Enabled: false
+    # the d435 cloud, made here from the compressed images (RVL depth, JPEG color); the robot only
+    # compresses and sends them while this display is enabled
+    - Class: rviz/DepthCloud
+      Name: CameraCloud
+      Enabled: true
+      Depth Map Topic: /gimbalrotor/camera/aligned_depth_to_color/image_raw
+      Depth Map Transport Hint: compressedDepth
+      Color Image Topic: /gimbalrotor/camera/color/image_raw
+      Color Transport Hint: compressed
+      Queue Size: 5
+      Style: Points
+      Size (Pixels): 2
+      Alpha: 1
+      Occlusion Compensation: false
+      Selectable: false
     - Class: rviz/TF
       Name: TF
       Enabled: false

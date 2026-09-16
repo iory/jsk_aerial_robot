@@ -25,7 +25,8 @@
           <arg name="tf_prefix" value="$(arg robot_ns)/camera" />
           <arg name="publish_tf" value="false" />
           <arg name="align_depth" value="true" />
-          <arg name="enable_pointcloud" value="true" />
+          <!-- the cloud is made on the operator PC from the compressed images, see gimbalrotor_remote -->
+          <arg name="enable_pointcloud" value="false" />
           <arg name="color_width" value="640" />
           <arg name="color_height" value="480" />
           <arg name="color_fps" value="30" />
@@ -52,6 +53,13 @@
 
       </group>
     </group>
+
+    <!-- compressed images for the operator PC. A transport only encodes while something subscribes to it.
+         Depth: RVL is lossless like PNG and about 5x cheaper on the onboard CPU (3.7 vs 20.5 ms for a
+         640x480 frame on the Khadas VIM4), for about 2x the size (190 vs 90 KB). Color: JPEG. -->
+    <param name="camera/aligned_depth_to_color/image_raw/compressedDepth/format" value="rvl" />
+    <param name="camera/color/image_raw/compressed/format" value="jpeg" />
+    <param name="camera/color/image_raw/compressed/jpeg_quality" value="60" />
 
     <!-- basic configuration for sensors (e.g. noise sigma) -->
     <rosparam file="$(find gimbalrotor)/config/sensors/imu/spinal.yaml" command="load" />

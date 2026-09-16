@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<!--
+  Decompress the D435 images of the robot on this PC and make its point cloud here, so that the onboard
+  computer only compresses (RVL depth, JPEG color) and the network only carries compressed images.
+
+    /<robot_ns>/camera/...               compressed, from the robot
+    /<robot_ns>/camera_remote/...        raw images, camera_info and the cloud, made on this PC
+
+  Nodes that need the raw images of the camera, e.g. grape_detector, can run here on
+  camera_ns:=<robot_ns>/camera_remote. The republishers subscribe as long as they run, so the robot
+  compresses and sends the images all that time; rviz alone does not need this launch (its DepthCloud
+  display decompresses by itself, and only while it is enabled).
+-->
+<launch>
+  <arg name="robot_ns" default="gimbalrotor" />
+  <arg name="camera" default="$(arg robot_ns)/camera" />
+  <arg name="output" default="$(arg robot_ns)/camera_remote" />
+  <arg name="manager" default="camera_remote_manager" />
+
+  <group ns="$(arg output)">
+    <node pkg="image_transport" type="republish" name="depth_republish" output="screen"
+          args="compressedDepth in:=/$(arg camera)/aligned_depth_to_color/image_raw
+                raw out:=aligned_depth_to_color/image_raw" />
+    <node pkg="image_transport" type="republish" name="color_republish" output="screen"
+          args="compressed in:=/$(arg camera)/color/image_raw raw out:=color/image_raw" />
+    <node pkg="topic_tools" type="relay" name="depth_info_relay"
+          args="/$(arg camera)/aligned_depth_to_color/camera_info aligned_depth_to_color/camera_info" />
+    <node pkg="topic_tools" type="relay" name="color_info_relay"
+          args="/$(arg camera)/color/camera_info color/camera_info" />
+
+    <node pkg="nodelet" type="nodelet" name="$(arg manager)" args="manager" output="screen" />
+    <node pkg="nodelet" type="nodelet" name="points"
+          args="load depth_image_proc/point_cloud_xyzrgb $(arg manager)" output="screen">
+      <remap from="rgb/image_rect_color" to="color/image_raw" />
+      <remap from="rgb/camera_info" to="color/camera_info" />
+      <remap from="depth_registered/image_rect" to="aligned_depth_to_color/image_raw" />
+      <remap from="depth_registered/points" to="depth/color/points" />
+      <param name="queue_size" value="10" />
+    </node>
+  </group>
+</launch>

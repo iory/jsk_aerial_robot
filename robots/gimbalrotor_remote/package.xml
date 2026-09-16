@@ -25,10 +25,15 @@
 
   <run_depend>actionlib</run_depend>
   <run_depend>aerial_robot_msgs</run_depend>
+  <run_depend>compressed_depth_image_transport</run_depend>
+  <run_depend>compressed_image_transport</run_depend>
   <run_depend>control_msgs</run_depend>
+  <run_depend>depth_image_proc</run_depend>
   <run_depend>gimbalrotor</run_depend>
+  <run_depend>image_transport</run_depend>
   <run_depend>libqt5-widgets</run_depend>
   <run_depend>nav_msgs</run_depend>
+  <run_depend>nodelet</run_depend>
   <run_depend>pluginlib</run_depend>
   <run_depend>roscpp</run_depend>
   <run_depend>rviz</run_depend>
@@ -36,6 +41,7 @@
   <run_depend>spinal</run_depend>
   <run_depend>std_msgs</run_depend>
   <run_depend>std_srvs</run_depend>
+  <run_depend>topic_tools</run_depend>
   <run_depend>urdf</run_depend>
 
   <export>

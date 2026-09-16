@@ -51,8 +51,39 @@ Besides the robot model, `config/arm.rviz` has two point cloud displays:
   `roslaunch livox_ros_driver2 msg_MID360.launch xfer_format:=0 msg_frame_id:=gimbalrotor/lidar_imu`
   (the default `xfer_format:=1` is a livox CustomMsg, which rviz cannot show). It is about 3.8 MB/s over the
   network, so turn it off when it is not needed.
+- `CameraCloud` (`rviz/DepthCloud`, on, in `arm.rviz` and `room.rviz`): the D435 cloud, made by rviz on
+  this PC from the compressed images of the robot (`compressedDepth` with RVL for the depth, `compressed`
+  JPEG for the color). The robot compresses and sends them only while the display is enabled; measured on
+  the real machine it costs about 18 % of one onboard core and about 1.4 MB/s at the rates below.
 - `FastLioMap` (`/cloud_registered`, off): the map of fast_lio. Its frame `camera_init` is where the robot
   started, and nothing connects it to the fixed frame yet, so enable it only with such a transform.
+
+## camera images and cloud on this PC
+
+The robot sends only compressed images: `bringup.launch` sets the depth to RVL and the color to JPEG
+(quality 60) and does not make the cloud on board. Nodes that need raw images or a `PointCloud2`, e.g.
+grape_detector, run on this PC on the images decompressed here:
+
+```bash
+roslaunch gimbalrotor_remote camera_remote.launch       # /gimbalrotor/camera_remote/...
+roslaunch grape_detector grape_detection.launch camera_ns:=gimbalrotor/camera_remote
+```
+
+`/gimbalrotor/camera_remote/depth/color/points` is the colored cloud. Unlike the rviz display, the
+republishers of this launch subscribe for as long as it runs.
+
+Measured on the real machine (Khadas VIM4, one 640x480 frame):
+
+| | onboard encoding | size |
+| --- | --- | --- |
+| depth, PNG level 1 (the default of compressedDepth) | 20.5 ms | 87 KB |
+| depth, RVL | 3.7 ms | 191 KB |
+| color, JPEG quality 60 | 3.7 ms | 19 KB |
+
+RVL is lossless like PNG and takes about a fifth of its CPU, for about twice the size. With the D435 on
+a USB 2 port the aligned depth comes at about 4.5 Hz (0.8 MB/s as RVL) and the color at about 26 Hz
+(0.5 MB/s); on USB 3 the depth reaches 30 Hz, about 5.7 MB/s as RVL, so lower `depth_fps` there if the
+network is tight.
 
 ## config/room.rviz
 
