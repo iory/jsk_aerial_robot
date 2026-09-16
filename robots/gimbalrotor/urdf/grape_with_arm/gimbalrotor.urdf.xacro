@@ -463,6 +463,52 @@
   <!--   <origin xyz="0 0 -0.08" rpy="3.14159 0 0"/> -->
   <!-- </joint> -->
 
+  <!-- Intel RealSense D435.
+
+       The camera pose comes from dragons_quadrotor_module_witharm.SLDASM: the
+       centre of the front (glass) face of the case is at xyz="0.118438 0 0.056"
+       in main_body, looking straight along +x, upright, not tilted.
+
+       The frame layout and every offset below are realsense2_description's
+       urdf/_d435.urdf.xacro (ros2-development), so these frames match what
+       realsense2_camera publishes on the real robot:
+       https://github.com/IntelRealSense/realsense-ros/blob/ros2-development/realsense2_description/urdf/_d435.urdf.xacro
+       camera_link is the depth (left IR) frame: 4.3 mm behind the front glass
+       (zero-depth plane) and 17.5 mm to the left of the case centre. -->
+  <link name="camera_bottom_screw_frame"/>
+  <joint name="camera_joint" type="fixed">
+    <parent link="main_body"/>
+    <child link="camera_bottom_screw_frame"/>
+    <origin xyz="0.103538 0 0.0435" rpy="0 0 0"/>
+  </joint>
+
+  <link name="camera_link"/>
+  <joint name="camera_link_joint" type="fixed">
+    <parent link="camera_bottom_screw_frame"/>
+    <child link="camera_link"/>
+    <origin xyz="0.0106 0.0175 0.0125" rpy="0 0 0"/>
+  </joint>
+
+  <xacro:macro name="d435_sensor_frame" params="name y">
+    <link name="camera_${name}_frame"/>
+    <joint name="camera_${name}_joint" type="fixed">
+      <parent link="camera_link"/>
+      <child link="camera_${name}_frame"/>
+      <origin xyz="0 ${y} 0" rpy="0 0 0"/>
+    </joint>
+    <link name="camera_${name}_optical_frame"/>
+    <joint name="camera_${name}_optical_joint" type="fixed">
+      <parent link="camera_${name}_frame"/>
+      <child link="camera_${name}_optical_frame"/>
+      <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:d435_sensor_frame name="depth"  y="0"/>
+  <xacro:d435_sensor_frame name="infra1" y="0"/>
+  <xacro:d435_sensor_frame name="infra2" y="-0.050"/>
+  <xacro:d435_sensor_frame name="color"  y="0.015"/>
+
   <!-- Include the arm macro -->
   <xacro:arm parent_link="main_body"/>
   
