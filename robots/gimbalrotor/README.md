@@ -110,6 +110,15 @@ sharpest) and the shift that correlates them best, so it needs no initial guess.
 every 180 deg, so set `yaw_hint:=` to the heading the robot had when the map was recorded, or place it that
 way. `~relocalize` (std_srvs/Empty) redoes the match.
 
+With that transform, the skrobot interface flies to map coordinates:
+
+```python
+ri.move_to_map([1.0, 0.0, 1.2])                      # same place on every run
+ri.move_to_map([0.0, 0.0, 1.0], yaw=np.radians(45))  # yaw is in the map frame too
+ri.map_position()                                    # where the CoG is in the map frame
+ri.map_to_world()                                    # the transform itself
+```
+
 Recorded maps are site data and are not in this repository.
 
 ## arm
@@ -128,6 +137,8 @@ ri.wait_interpolation()
 ri.start_grasp(); ri.stop_grasp()
 ri.torque_off(); ri.torque_on()           # servo torque of the arm joints
 ri.start(); ri.takeoff(); ri.go_pos(x=0.5); ri.land()
+ri.move_to([1.0, 0.0, 1.2])               # world frame of the estimator
+ri.move_to_map([1.0, 0.0, 1.2])           # map frame, see below
 ```
 
 It needs the scikit-robot venv built by catkin_virtualenv, so run it with

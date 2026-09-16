@@ -11,6 +11,7 @@ Example
 >>> ri.start()     # motor arming
 >>> ri.takeoff()
 >>> ri.move_to([1.0, 0.0, 1.2])  # world frame, origin: estimator start
+>>> ri.move_to_map([1.0, 0.0, 1.2])  # map frame, the same place on every run
 >>> robot.arm_joint2_joint1.joint_angle(-0.5)
 >>> ri.angle_vector(robot.angle_vector(), 3.0)
 >>> ri.wait_interpolation()
@@ -34,6 +35,7 @@ from aerial_robot_base.robot_interface import RobotInterface
 import control_msgs.msg
 import numpy as np
 import rospy
+import tf2_ros
 from skrobot.coordinates import Coordinates
 from skrobot.coordinates.math import quaternion2matrix
 from skrobot.coordinates.math import xyzw2wxyz
@@ -326,6 +328,11 @@ class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
         If False, the flight stack (``aerial_robot_base``) is not required:
         only the arm, the gripper and the servo torque are available, and
         the flight methods raise ``RuntimeError``.
+    map_frame : str
+        Frame whose coordinates are the same on every run, used by
+        ``move_to_map`` (default: map, published by room_localization.py).
+    world_frame : str
+        Frame of the state estimation, i.e. of ``move_to`` (default: world).
     **kwargs
         Passed to ``ROSRobotInterfaceBase``.
     """
@@ -333,7 +340,8 @@ class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
     def __init__(self, robot=None, namespace='gimbalrotor',
                  arm_controller_ns='arm/arm_controller',
                  gripper_joint_name=None, gripper_open_sign=None,
-                 sync_base_pose=True, use_flight=True, **kwargs):
+                 sync_base_pose=True, use_flight=True, map_frame='map',
+                 world_frame='world', **kwargs):
         if not rospy.core.is_initialized():
             rospy.init_node('gimbalrotor_skrobot_interface', anonymous=True,
                             disable_signals=True)
@@ -358,6 +366,10 @@ class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
                     'odometry of /{} is not received'.format(namespace))
 
         self.servo_torque = ArmServoTorque(namespace, arm_controller_ns)
+        self.map_frame = map_frame
+        self.world_frame = world_frame
+        self._tf_buffer = None
+        self._tf_listener = None
 
         super(GimbalrotorROSRobotInterface, self).__init__(
             robot, namespace=namespace, **kwargs)
@@ -594,6 +606,83 @@ class GimbalrotorROSRobotInterface(ROSRobotInterfaceBase):
             [c * x - s * y, s * x + c * y, z])
         target_yaw = np.arctan2(np.sin(current_yaw + yaw),
                                 np.cos(current_yaw + yaw))
+        return self.move_to(target, yaw=target_yaw, **kwargs)
+
+    # ---------------------------------------------------------------------
+    # map frame (same coordinates on every run)
+    # ---------------------------------------------------------------------
+    def map_to_world(self, timeout=2.0):
+        """Return the transform from the map frame to the world of the estimator.
+
+        The world of the estimator starts where the state estimation started, so it
+        differs between runs; the map frame does not. The transform is looked up from
+        tf, where ``gimbalrotor/script/room_localization.py`` publishes it.
+
+        Parameters
+        ----------
+        timeout : float
+            Time to wait for the transform [s].
+
+        Returns
+        -------
+        skrobot.coordinates.Coordinates
+            Pose of the map frame in the world frame, i.e. it takes a point of the map
+            frame to the world frame.
+        """
+        if self._tf_buffer is None:
+            self._tf_buffer = tf2_ros.Buffer()
+            self._tf_listener = tf2_ros.TransformListener(self._tf_buffer)
+            rospy.sleep(0.5)  # let the listener fill the buffer
+        try:
+            transform = self._tf_buffer.lookup_transform(
+                self.world_frame, self.map_frame, rospy.Time(0),
+                rospy.Duration(timeout)).transform
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+                tf2_ros.ExtrapolationException) as e:
+            raise RuntimeError(
+                'no transform from {} to {}: is room_localization running? ({})'.format(
+                    self.map_frame, self.world_frame, e))
+        rot = quaternion2matrix(xyzw2wxyz(np.array([
+            transform.rotation.x, transform.rotation.y,
+            transform.rotation.z, transform.rotation.w])))
+        return Coordinates(pos=np.array([transform.translation.x,
+                                         transform.translation.y,
+                                         transform.translation.z]), rot=rot)
+
+    def map_position(self, timeout=2.0):
+        """Return the CoG position in the map frame [m]."""
+        return self.map_to_world(timeout).inverse_transformation().transform_vector(
+            self.cog_position())
+
+    def move_to_map(self, pos, yaw=None, **kwargs):
+        """Move the CoG to a position of the map frame.
+
+        The same map coordinates go to the same place on every run, unlike the world
+        frame of the estimator, which starts where the state estimation started.
+
+        Parameters
+        ----------
+        pos : array_like
+            Target CoG position [x, y, z] in the map frame [m].
+        yaw : float or None
+            Target yaw in the map frame [rad]. If None, the current yaw is kept.
+        **kwargs
+            Passed to ``move_to``.
+
+        Returns
+        -------
+        bool
+            Result of ``move_to``.
+        """
+        pos = np.asarray(pos, dtype=np.float64)
+        if pos.shape != (3,):
+            raise ValueError('pos must be [x, y, z], but given {}'.format(pos))
+        map_to_world = self.map_to_world()
+        target = map_to_world.transform_vector(pos)
+        if yaw is None:
+            return self.move_to(target, **kwargs)
+        map_yaw = np.arctan2(map_to_world.rotation[1, 0], map_to_world.rotation[0, 0])
+        target_yaw = np.arctan2(np.sin(yaw + map_yaw), np.cos(yaw + map_yaw))
         return self.move_to(target, yaw=target_yaw, **kwargs)
 
     # ---------------------------------------------------------------------
