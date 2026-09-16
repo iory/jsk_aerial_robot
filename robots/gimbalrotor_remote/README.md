@@ -42,6 +42,18 @@ Arguments of `remote_rviz.launch`: `robot_ns` (default `gimbalrotor`), `arm_cont
 (`arm/arm_controller`), `rviz_config` (`config/arm.rviz`). It also starts
 `gimbalrotor/arm_torque_server.py`, which the arm panel calls.
 
+## displays
+
+Besides the robot model, `config/arm.rviz` has two point cloud displays:
+
+- `LivoxScan` (`/livox/lidar`, on): the live scan. The driver has to publish PointCloud2 in the frame of the
+  robot model, i.e. start it as
+  `roslaunch livox_ros_driver2 msg_MID360.launch xfer_format:=0 msg_frame_id:=gimbalrotor/lidar_imu`
+  (the default `xfer_format:=1` is a livox CustomMsg, which rviz cannot show). It is about 3.8 MB/s over the
+  network, so turn it off when it is not needed.
+- `FastLioMap` (`/cloud_registered`, off): the map of fast_lio. Its frame `camera_init` is where the robot
+  started, and nothing connects it to the fixed frame yet, so enable it only with such a transform.
+
 ## ArmControlPanel
 
 Per joint of `arm_controller`: servo torque state (ON green / OFF red / `?` when
