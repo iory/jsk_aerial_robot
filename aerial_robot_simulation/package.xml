@@ -34,6 +34,8 @@
   <run_depend>gazebo_ros</run_depend>
   <run_depend>gazebo_ros_control</run_depend>
   <run_depend>hector_gazebo_plugins</run_depend>
+  <!-- libgazebo_ros_openni_kinect.so for the depth camera of grape_with_arm -->
+  <run_depend>gazebo_plugins</run_depend>
   <run_depend>kdl_parser</run_depend>
   <run_depend>mujoco_ros_control</run_depend>
   <run_depend>roscpp</run_depend>

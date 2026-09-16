@@ -29,6 +29,7 @@
   <run_depend>aerial_robot_simulation</run_depend>
   <run_depend>aerial_robot_base</run_depend>
   <run_depend>gazebo_msgs</run_depend>
+  <run_depend>realsense2_camera</run_depend>
   <run_depend>gazebo_ros</run_depend>
   <run_depend>spinal</run_depend>
   <run_depend>roscpp</run_depend>
