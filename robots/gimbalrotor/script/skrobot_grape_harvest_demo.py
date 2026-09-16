@@ -724,7 +724,9 @@ class GrapeHarvestDemo(object):
         # joints not in arm_pose, i.e. the gripper, keep the measured angle
         for name, angle in arm_pose.items():
             getattr(ri.robot, name).joint_angle(angle)
-        rospy.loginfo('[%s] arm -> %s', label, arm_pose)
+        rospy.loginfo('[%s] arm -> %s', label,
+                      {name: round(angle, 3)
+                       for name, angle in arm_pose.items()})
         ri.angle_vector(ri.robot.angle_vector(), self.motion['arm_time'])
         ri.wait_interpolation()
         result = ri.controller_table['arm_controller'][0].get_result()
