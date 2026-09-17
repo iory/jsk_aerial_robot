@@ -50,9 +50,15 @@ controller:
     limit_d: 20.0
 
   yaw:
-    p_gain: 4.0
-    i_gain: 1.0
-    d_gain: 2.0
+    # sized on the flights of 2026-09-17: near liftoff a yaw torque of 0.6-1.0 Nm turned the robot by
+    # 90-116 deg with 4/1/2, which a simulation of the plant identified from the flights reproduces. With
+    # 10/5/4 that simulation stays within 20-23 deg for 1 Nm (gimbal servo lag 0.1 s, the real inertia up
+    # to 2.3 times the model), and gazebo (0.8 Nm for 6 s) within 6 deg with the arm (5/1/2: 14 deg) and
+    # 12 deg without the pipe (5/1/2: 33 deg). A d gain of 6 shakes the yaw at 4 Hz with the arm in
+    # gazebo (5 does not)
+    p_gain: 10.0
+    i_gain: 5.0
+    d_gain: 4.0
     limit_err_p: 0.4
     limit_sum: 20.0
     limit_p: 20.0
