@@ -58,10 +58,30 @@
              (config/sensors/lio/livox_mid360.yaml of aerial_robot_base). fast_lio uses the IMU of the
              MID360 (livox/imu); the pipeline that fed it the IMU of spinal needs imu_transformer. -->
         <group if="$(arg lidar)">
-          <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360.launch" />
+          <!-- the driver of launch_ROS1/msg_MID360.launch of livox_ros_driver2, without its
+               required="true": there, a driver that dies takes the whole bringup (and the flight
+               control) down with it. A lidar that stops is handled by the state estimation below. -->
+          <param name="xfer_format" value="1" />
+          <param name="multi_topic" value="0" />
+          <param name="data_src" value="0" />
+          <param name="publish_freq" type="double" value="10.0" />
+          <param name="output_data_type" value="0" />
+          <param name="cmdline_str" type="string" value="100000000000000" />
+          <param name="cmdline_file_path" type="string" value="livox_test.lvx" />
+          <param name="user_config_path" type="string" value="$(find livox_ros_driver2)/config/MID360_config.json" />
+          <param name="frame_id" type="string" value="livox_frame" />
+          <param name="enable_lidar_bag" type="bool" value="true" />
+          <param name="enable_imu_bag" type="bool" value="true" />
+          <node name="livox_lidar_publisher2" pkg="livox_ros_driver2" type="livox_ros_driver2_node"
+                output="screen" args="100000000000000" />
+
           <include file="$(find fast_lio)/launch/mapping_mid360.launch" >
             <arg name="rviz" value="false" />
           </include>
+
+          <!-- the odometry of fast_lio starts at z = 0 where bringup starts, not on the ground: take off
+               takeoff_height above the height at arming (see flight_navigation.h) -->
+          <param name="navigation/relative_takeoff_height" value="true" />
         </group>
 
       </group>
@@ -78,6 +98,13 @@
     <rosparam file="$(find gimbalrotor)/config/sensors/imu/spinal.yaml" command="load" />
     <rosparam file="$(find aerial_robot_base)/config/sensors/mocap.yaml" command="load" />
     <rosparam file="$(find aerial_robot_base)/config/sensors/lio/livox_mid360.yaml" command="load" />
+    <!-- fast_lio stops (health_timeout without Odometry_precede) on the real machine: force landing
+         (unhealth level 3, as for mocap) instead of flying on in position control with the drift of the
+         IMU alone. The level stays until bringup restarts, so the robot does not arm again either. -->
+    <group if="$(eval arg('real_machine') and not arg('simulation') and arg('lidar'))">
+      <param name="sensor_plugin/vo/unhealth_level" value="3" />
+      <param name="sensor_plugin/vo/health_timeout" value="1.0" />
+    </group>
 
   </group>
 

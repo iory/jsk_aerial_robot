@@ -295,6 +295,9 @@ namespace aerial_robot_navigation
     tf::Vector3 target_rpy_, target_omega_, target_ang_acc_;
 
     double takeoff_height_;
+    // takeoff_height_ above the height at arming instead of the height itself, for an odometry whose
+    // z = 0 is where it started (e.g. lidar odometry) rather than the ground
+    bool relative_takeoff_height_;
     double init_height_;
     double land_height_;
     double land_descend_vel_;
@@ -426,10 +429,11 @@ namespace aerial_robot_navigation
       setNaviState(START_STATE);
       trajectory_mode_ = false;
       setTargetXyFromCurrentState();
-      setTargetPosZ(takeoff_height_);
+      double arming_height = estimator_->getPos(Frame::COG, estimate_mode_).z();
+      setTargetPosZ(relative_takeoff_height_ ? arming_height + takeoff_height_ : takeoff_height_);
       setTargetVelZ(0);
       setTargetAccZ(0);
-      setInitHeight(estimator_->getPos(Frame::COG, estimate_mode_).z());
+      setInitHeight(arming_height);
       setTargetYawFromCurrentState();
 
       ROS_INFO_STREAM("init height for takeoff: " << init_height_ << ", target height: " << getTargetPos().z());

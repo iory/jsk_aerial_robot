@@ -91,6 +91,20 @@ The onboard PC reaches the LiDAR over Ethernet and the depth camera over USB.
 - The LiDAR and the onboard PC must hold the addresses of `livox_ros_driver2/config/MID360_config.json`.
   Otherwise the driver still receives the points but drops them with
   `Storage point data failed, can not get index` and publishes nothing.
+- Flight with the lidar odometry (`estimate_mode:=0`): its world starts where fast_lio gets its first
+  data, at the height of the robot then, and the target of the first flight is taken at arming.
+  - The xy target is where the robot is at arming, so a robot carried after bringup does not fly back.
+  - The takeoff goes `takeoff_height` above the height at arming (`navigation/relative_takeoff_height`,
+    set by bringup with `lidar:=`), not to that height in the world: bringup started on a desk and the
+    robot then put on the floor would otherwise climb the height of the desk on top.
+  - fast_lio stopping in flight (no `Odometry_precede` for 1 s) lands the robot by force (unhealth level
+    3 of `sensor_plugin/vo`), instead of holding a position that drifts with the IMU alone. The level
+    stays: restart bringup before the next flight.
+  - The livox driver is not `required`: in its own launch file a dying driver takes the whole bringup,
+    and with it the flight control, down.
+  - Nothing catches a jump of the lidar odometry itself (a degenerate scene, a robot moved while fast_lio
+    starts): keep the robot still and level for a few seconds after bringup and look at the cloud in rviz
+    before a flight.
 - fast_lio runs in the namespace of the robot, as for dragon: the state estimation (`sensor_plugin/vo`)
   subscribes to `<robot_ns>/Odometry_precede`. Started outside it, fast_lio publishes `/Odometry_precede`,
   which nothing reads, and the state estimation gets no position. It uses the IMU of the MID360.

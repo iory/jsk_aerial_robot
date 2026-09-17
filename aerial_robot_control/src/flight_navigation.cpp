@@ -11,7 +11,7 @@ BaseNavigator::BaseNavigator():
   target_rpy_(0, 0, 0),
   target_omega_(0, 0, 0),
   target_ang_acc_(0, 0, 0),
-  init_height_(0), land_height_(0),
+  relative_takeoff_height_(false), init_height_(0), land_height_(0),
   force_att_control_flag_(false),
   trajectory_mode_(false),
   trajectory_reset_time_(0),
@@ -1100,6 +1100,7 @@ void BaseNavigator::rosParamInit()
   ros::NodeHandle nh(nh_, "navigation");
   getParam<int>(nh, "xy_control_mode", xy_control_mode_, 0);
   getParam<double>(nh, "takeoff_height", takeoff_height_, 0.0);
+  getParam<bool>(nh, "relative_takeoff_height", relative_takeoff_height_, false);
 
   getParam<double>(nh, "land_descend_vel",land_descend_vel_, -0.3);
   if (land_descend_vel_ >= 0) {
