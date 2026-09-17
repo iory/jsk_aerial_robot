@@ -37,6 +37,10 @@ void GimbalrotorNavigator::reset()
 {
   BaseNavigator::reset();
 
+  // a roll / pitch target given through uav/nav (e.g. script/excite_attitude.py) must not stay for the next flight
+  setTargetRoll(0);
+  setTargetPitch(0);
+
   // reset SO3
   eq_cog_world_ = false;
   curr_target_baselink_rot_.setRPY(0, 0, 0);
