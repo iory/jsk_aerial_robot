@@ -26,7 +26,10 @@ controller:
     force_landing_descending_rate: -0.5
 
   roll_pitch:
-    start_rp_integration_height: 0.01
+    # the roll/pitch I control starts this far above the height at arming. The lidar odometry (fast_lio)
+    # wanders about 1 cm standing still, so 0.01 started it on the ground 0.8 s into a takeoff, where
+    # the integral grew for 10 s and tilted the robot by 10-16 deg as it left the ground (2026-09-17)
+    start_rp_integration_height: 0.1
 
   pitch:
     p_gain: 15.0

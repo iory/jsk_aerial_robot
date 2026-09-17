@@ -148,7 +148,9 @@ namespace aerial_robot_control
     pid_reconf_servers_.back()->setCallback(boost::bind(&PoseLinearController::cfgPidCallback, this, _1, _2, std::vector<int>(1, Z)));
 
     /* roll pitch */
-    getParam<double>(roll_pitch_nh, "start_integration_height", start_rp_integration_height_, 0.01);
+    // the configs of the robots name it start_rp_integration_height, which was not read
+    if(!roll_pitch_nh.getParam("start_integration_height", start_rp_integration_height_))
+      getParam<double>(roll_pitch_nh, "start_rp_integration_height", start_rp_integration_height_, 0.01);
     if(roll_pitch_nh.hasParam("p_gain"))
       {
         loadParam(roll_pitch_nh);
