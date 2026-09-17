@@ -1,0 +1,16 @@
+# gazebo with the actuator delays of the real grape_with_arm (bringup.launch sim_actuator_delay:=true)
+#
+# Measured in the hovers of 2026-09-17 (22:34, 23:12):
+# - rotor: the rotor speed (esc_telem) follows the commanded thrust 0.07-0.08 s later
+# - gimbal: the servo angle (joint_states) follows the command 0.10-0.11 s later
+motor_info:
+  # dead time and first order lag (tau 0.04 s at the 1 ms step: 0.001 / (0.04 + 0.001))
+  rotor_delay: 0.03
+  rotor_damping_rate: 0.0244
+
+servo_controller:
+  gimbals:
+    simulation:
+      # the serial link to the servos, then a slower position loop than the stiff default
+      command_delay: 0.03
+      pid: {p: 50.0, i: 0.01, d: 3.5, i_clamp_min: -6.6, i_clamp_max: 6.6}

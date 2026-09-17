@@ -44,7 +44,7 @@
 namespace flight_controllers {
 
 SimulationAttitudeController::SimulationAttitudeController()
-  : loop_count_(0), motor_num_(0), controller_core_(new FlightControl()), debug_mode_(false)
+  : loop_count_(0), motor_num_(0), controller_core_(new FlightControl()), debug_mode_(false), rotor_delay_(0.0)
 {
 }
 
@@ -78,6 +78,10 @@ bool SimulationAttitudeController::init(hardware_interface::SpinalInterface *rob
 
   debug_sub_ = n.subscribe("debug_force", 1, &SimulationAttitudeController::debugCallback, this);
 
+  n_robot.param("motor_info/rotor_delay", rotor_delay_, 0.0);
+  if(rotor_delay_ > 0)
+    ROS_INFO_STREAM_NAMED("simulation_attitude_controller", "the rotor thrust is delayed by " << rotor_delay_ << " s");
+
   return true;
 }
 
@@ -108,12 +112,29 @@ void SimulationAttitudeController::update(const ros::Time& time, const ros::Dura
   /* update the controller */
   controller_core_->update();
 
+  std::vector<double> forces(motor_num_);
+  for(int i = 0; i < motor_num_; i++)
+    forces[i] = controller_core_->getAttController().getForce(i);
+  if(rotor_delay_ > 0)
+    {
+      force_queue_.push_back(std::make_pair(time, forces));
+      if(delayed_forces_.size() != forces.size())
+        delayed_forces_.assign(motor_num_, 0.0);
+      // the latest command that is at least rotor_delay_ old
+      while(!force_queue_.empty() && force_queue_.front().first + ros::Duration(rotor_delay_) <= time)
+        {
+          delayed_forces_ = force_queue_.front().second;
+          force_queue_.pop_front();
+        }
+      forces = delayed_forces_;
+    }
+
   for(int i = 0; i < motor_num_; i++)
     {
       std::stringstream joint_no;
       joint_no << i + 1;
       hardware_interface::RotorHandle rotor = spinal_interface_->getHandle(std::string("rotor") + joint_no.str());
-      rotor.setForce(controller_core_->getAttController().getForce(i));
+      rotor.setForce(forces[i]);
     }
 }
 

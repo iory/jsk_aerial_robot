@@ -4,6 +4,12 @@
   <xacro:include filename="$(find gimbalrotor)/urdf/grape_with_arm/common.xacro"/>
   <xacro:include filename="$(find gimbalrotor)/urdf/grape_with_arm/xacro/arm.xacro"/>
 
+  <!-- added to the inertia of main_body, for a gazebo robot with the inertia measured in flight while the
+       controller keeps the model (bringup.launch sim_body_extra_inertia) -->
+  <xacro:arg name="body_extra_ixx" default="0.0"/>
+  <xacro:arg name="body_extra_iyy" default="0.0"/>
+  <xacro:arg name="body_extra_izz" default="0.0"/>
+
   <!-- <link name="root"> -->
   <!--   <inertial> -->
   <!--     <origin xyz="0 0 0" rpy="0 0 0"/> -->
@@ -77,12 +83,12 @@
       <mass value="2.3707399"/>
       <!-- <inertia ixx="0.0150906" ixy="-0.0000095" ixz="-0.0001112" iyy="0.0153469" iyz="-0.0000102" izz="0.0122100"/> -->
       <inertia
-	  ixx="0.0296853"
+	  ixx="${0.0296853 + $(arg body_extra_ixx)}"
 	  ixy="-0.0000187"
 	  ixz="-0.0002187"
-	  iyy="0.0301894"
+	  iyy="${0.0301894 + $(arg body_extra_iyy)}"
 	  iyz="-0.0000201"
-	  izz="0.0240188"/>
+	  izz="${0.0240188 + $(arg body_extra_izz)}"/>
     </inertial>
     <visual>
       <geometry>

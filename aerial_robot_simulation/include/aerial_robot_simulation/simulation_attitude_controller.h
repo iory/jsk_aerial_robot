@@ -43,6 +43,7 @@
 #include <aerial_robot_estimation/state_estimation.h>
 #include <aerial_robot_simulation/spinal_interface.h>
 #include <boost/scoped_ptr.hpp>
+#include <deque>
 #include <controller_interface/controller.h>
 #include <flight_control/flight_control.h>
 #include <ros/node_handle.h>
@@ -87,6 +88,11 @@ private:
 
   bool debug_mode_;
   float debug_force_;
+  /* dead time of the rotor thrust (motor_info/rotor_delay [s]): the forces commanded by the flight controller
+     reach the rotors this much later, like the ESC and motor of the real machine */
+  double rotor_delay_;
+  std::deque<std::pair<ros::Time, std::vector<double> > > force_queue_;
+  std::vector<double> delayed_forces_;
 
   void debugCallback(const std_msgs::Float64& debug_force)
   {

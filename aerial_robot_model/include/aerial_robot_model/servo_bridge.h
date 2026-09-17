@@ -60,6 +60,7 @@
 #include <kalman_filter/lpf_filter.h>
 
 /* util */
+#include <deque>
 #include <string>
 #include <boost/algorithm/clamp.hpp>
 
@@ -234,6 +235,14 @@ protected:
   map<string, ros::ServiceServer> servo_enable_srvs_;
   map<string, ros::Publisher> servo_enable_pubs_;
   map<string, vector<ros::Publisher> > servo_target_pos_sim_pubs_; // TODO: should be actionlib, trajectory controller
+  /* simulation: the servo commands reach the gazebo controllers command_delay [s] later (servo_controller/<group>/
+     simulation/command_delay), like the serial link and the servo of the real machine */
+  map<string, double> sim_command_delays_;
+  struct DelayedCommand { ros::Time stamp; ros::Publisher pub; double value; };
+  std::deque<DelayedCommand> sim_command_queue_;
+  ros::Timer sim_command_timer_;
+  void publishSimCommand(const std::string& group, ros::Publisher& pub, double value);
+  void simCommandTimerCallback(const ros::TimerEvent& event);
 
   map<string, ServoGroupHandler> servos_handler_;
   double moving_check_rate_;

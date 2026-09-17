@@ -238,6 +238,19 @@ ServoBridge::ServoBridge(ros::NodeHandle nh, ros::NodeHandle nhp): nh_(nh),nhp_(
     }
 
   if(!simulation_mode_) servo_states_pub_ = nh_.advertise<sensor_msgs::JointState>("joint_states", 1);
+
+  if(simulation_mode_)
+    {
+      for(const auto& group : servos_handler_)
+        {
+          double delay = 0.0;
+          nh_.param(string("servo_controller/") + group.first + string("/simulation/command_delay"), delay, 0.0);
+          sim_command_delays_[group.first] = delay;
+          if(delay > 0)
+            ROS_INFO("servo bridge: the gazebo commands of %s are delayed by %f s", group.first.c_str(), delay);
+        }
+      sim_command_timer_ = nh_.createTimer(ros::Duration(0.002), &ServoBridge::simCommandTimerCallback, this);
+    }
 }
 
 void ServoBridge::servoStatesCallback(const spinal::ServoStatesConstPtr& state_msg, const string& servo_group_name)
@@ -366,7 +379,7 @@ void ServoBridge::servoCtrlCallback(const sensor_msgs::JointStateConstPtr& servo
             {
               std_msgs::Float64 msg;
               msg.data = servo_ctrl_msg->position[i];
-              servo_target_pos_sim_pubs_[servo_group_name].at(distance(servos_handler_[servo_group_name].begin(), servo_handler)).publish(msg);
+              publishSimCommand(servo_group_name, servo_target_pos_sim_pubs_[servo_group_name].at(distance(servos_handler_[servo_group_name].begin(), servo_handler)), msg.data);
             }
         }
     }
@@ -404,7 +417,7 @@ void ServoBridge::servoCtrlCallback(const sensor_msgs::JointStateConstPtr& servo
             {
               std_msgs::Float64 msg;
               msg.data = servo_ctrl_msg->position[i];
-              servo_target_pos_sim_pubs_[servo_group_name].at(i).publish(msg);
+              publishSimCommand(servo_group_name, servo_target_pos_sim_pubs_[servo_group_name].at(i), msg.data);
             }
         }
     }
@@ -483,6 +496,31 @@ void ServoBridge::servoTorqueCtrlCallback(const sensor_msgs::JointStateConstPtr&
     servo_target_torque_pubs_[servo_group_name].publish(target_torque_msg);
   else
     servo_target_torque_pubs_["common"].publish(target_torque_msg);
+}
+
+void ServoBridge::publishSimCommand(const std::string& group, ros::Publisher& pub, double value)
+{
+  const double delay = sim_command_delays_[group];
+  if(delay <= 0)
+    {
+      std_msgs::Float64 msg;
+      msg.data = value;
+      pub.publish(msg);
+      return;
+    }
+  sim_command_queue_.push_back(DelayedCommand{ros::Time::now() + ros::Duration(delay), pub, value});
+}
+
+void ServoBridge::simCommandTimerCallback(const ros::TimerEvent& event)
+{
+  const ros::Time now = ros::Time::now();
+  while(!sim_command_queue_.empty() && sim_command_queue_.front().stamp <= now)
+    {
+      std_msgs::Float64 msg;
+      msg.data = sim_command_queue_.front().value;
+      sim_command_queue_.front().pub.publish(msg);
+      sim_command_queue_.pop_front();
+    }
 }
 
 bool ServoBridge::servoEnableCallback(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res, const std::string& servo_group_name)
