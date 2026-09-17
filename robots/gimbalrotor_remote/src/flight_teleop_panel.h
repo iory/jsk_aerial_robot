@@ -5,9 +5,12 @@
 #include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
 #include <rviz/panel.h>
+#include <sensor_msgs/JointState.h>
+#include <spinal/ServoTorqueStates.h>
 #include <std_msgs/Float32.h>
 #include <std_msgs/UInt8.h>
 
+#include <map>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -34,6 +37,15 @@ namespace gimbalrotor_remote
  * The navigator accepts uav/nav only in HOVER_STATE, so the direction buttons are enabled only then.
  * Arming and takeoff are enabled only while "enable arming / takeoff" is checked; it is never restored from the
  * rviz config. Land, halt and force landing are always enabled.
+ *
+ * gimbals (only in ARM_OFF, the motors stopped):
+ * - torque on / off : std_srvs/SetBool "<robot_ns>/gimbals/torque_enable" of servo_bridge
+ * - to 0 deg        : torque on, then sensor_msgs/JointState "<robot_ns>/gimbals_ctrl" with every gimbal at 0
+ * - set current as 0: torque off, then spinal/SetBoardConfig "<robot_ns>/set_board_config" SET_SERVO_HOMING_OFFSET
+ *                     with the raw value of 0 rad (zero_point_offset of the servo config), which makes the servo
+ *                     rewrite its homing offset so that the present pose reads 0 rad (kept in the servo)
+ * The gimbal ids, names and zero points come from "<robot_ns>/servo_controller/gimbals" (the Servo.yaml of the
+ * robot); the angles and torque flags shown come from "<robot_ns>/joint_states" and "<robot_ns>/servo/torque_states".
  */
 class FlightTeleopPanel : public rviz::Panel
 {
@@ -56,11 +68,30 @@ private:
   void flightStateCallback(const std_msgs::UInt8ConstPtr& msg);
   void odomCallback(const nav_msgs::OdometryConstPtr& msg);
   void batteryCallback(const std_msgs::Float32ConstPtr& msg);
+  void jointStateCallback(const sensor_msgs::JointStateConstPtr& msg);
+  void torqueStateCallback(const spinal::ServoTorqueStatesConstPtr& msg);
+  bool loadGimbalConfig(const std::string& robot_ns);
+  std::vector<int> selectedGimbals() const;
+  bool setGimbalTorque(bool enable);
+  void sendGimbalZero();
+  void setGimbalZeroHere();
+  void setStatus(const QString& text, bool error);
+
+  struct GimbalServo
+  {
+    std::string name;
+    int id;
+    int zero_point_offset;  // raw value of 0 rad
+  };
 
   ros::NodeHandle nh_;
   ros::Publisher start_pub_, takeoff_pub_, land_pub_, halt_pub_, force_landing_pub_;
   ros::Publisher nav_pub_;
   ros::Subscriber flight_state_sub_, odom_sub_, battery_sub_;
+  ros::Publisher gimbal_ctrl_pub_;
+  ros::Subscriber joint_state_sub_, torque_state_sub_;
+  std::string robot_ns_;
+  std::vector<GimbalServo> gimbals_;
 
   QLineEdit* robot_ns_edit_;
   QLabel* state_label_;
@@ -83,6 +114,12 @@ private:
   QPushButton* yaw_right_button_;
   QPushButton* stop_button_;
   std::vector<QPushButton*> direction_buttons_;
+  QLabel* gimbal_label_;
+  QComboBox* gimbal_combo_;
+  QPushButton* gimbal_on_button_;
+  QPushButton* gimbal_off_button_;
+  QPushButton* gimbal_zero_button_;
+  QPushButton* gimbal_calib_button_;
   QLabel* status_label_;
   QTimer* timer_;
 
@@ -93,6 +130,10 @@ private:
   ros::WallTime last_odom_time_;
   double battery_voltage_ = 0.0;
   ros::WallTime last_battery_time_;
+  std::map<std::string, double> joint_angles_;
+  ros::WallTime last_joint_state_time_;
+  std::vector<uint8_t> torque_states_;
+  ros::WallTime last_torque_state_time_;
 
   /* axes commanded at the previous update, to send zero once they are released */
   bool xy_active_ = false, z_active_ = false, yaw_active_ = false;
