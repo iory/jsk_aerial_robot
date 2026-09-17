@@ -16,9 +16,14 @@ controller:
     # landing: no x / y control below 15 cm; with little thrust it asked for gimbal tilts at the limit and
     # pushed the robot 0.1-0.4 m sideways (gazebo)
     stop_control_height: 0.15
-    p_gain: 3.0
-    i_gain: 0.1
-    d_gain: 1.0
+    # 3/0.1/1 until 2026-09-18. The side force of the position control tilts the gimbals, and that force turns
+    # the roll / pitch 0.45 s later through the height of the rotors above the centroid (half of the pitch
+    # torque in the hovers of 2026-09-17). In gazebo calibrated on the real flights, at the slowest plants
+    # (1.75-2 times the measured actuator delays) 3/0.1/1 turned over in 6 of 8 takeoffs and 2/0.05/1.5 (the
+    # gazebo config) hovered in 8 of 8, within 3 deg rms
+    p_gain: 2.0
+    i_gain: 0.05
+    d_gain: 1.5
     limit_sum: 4.0
     limit_p: 12.0
     limit_i: 12.0
