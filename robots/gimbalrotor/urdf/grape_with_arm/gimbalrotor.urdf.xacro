@@ -67,8 +67,11 @@
              robot 8.3 mm behind the model, which flew arm side up by 6-15 deg: the body centroid was moved
              by 8.3 mm * 3.395 kg / 1.865 kg to x 0.0027468
            - the robot weighs 3.9 kg against 3.395 kg of the model: the missing 0.505 kg is added to the body at
-             the centroid of the robot (so the centroid stays), and the inertia is scaled with the mass -->
-      <origin xyz="0.0042073 0.0016796 -0.0314033" rpy="0.0 -0.0 0.0"/>
+             the centroid of the robot (so the centroid stays), and the inertia is scaled with the mass
+           - a hover with that (22:15) put the centroid of the robot 2.5 mm behind and 2.3 mm left of the
+             model, and the robot hovered left side down by 4 deg: the body centroid moved from
+             (0.0042073, 0.0016796) by those times 3.9 kg / 2.371 kg -->
+      <origin xyz="0.0000947 0.0054632 -0.0314033" rpy="0.0 -0.0 0.0"/>
       <!-- <mass value="1.3193189"/> -->
       <!-- <mass value="2.0421872">/ -->
       <mass value="2.3707399"/>
