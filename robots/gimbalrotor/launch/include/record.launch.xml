@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<!--
+  Record a flight of the real machine on the onboard PC, for looking at it again afterwards:
+
+  - the D435 as it goes to the operator PC (JPEG color, RVL depth and their camera_info) and tf, so that
+    gimbalrotor_remote/launch/camera_remote.launch makes the camera cloud from the bag as it does live
+  - the MID360 (livox/lidar, livox/imu), from which fast_lio can be run again, and fast_lio's odometry
+  - the state estimation, the flight state and commands, the IMU of spinal, the arm and grape_detector
+
+  bringup.launch includes it with rosbag:=true. The camera images are compressed only while someone
+  subscribes, so recording them costs the onboard CPU what a remote rviz showing them does.
+-->
+<launch>
+  <arg name="robot_ns" default="gimbalrotor" />
+  <!-- bags are named <prefix>_<date>_<n>.bag, split every split_size MB -->
+  <arg name="prefix" default="$(env HOME)/.ros/$(arg robot_ns)" />
+  <arg name="split_size" default="1024" />
+
+  <arg name="camera" value="/$(arg robot_ns)/camera" />
+  <node pkg="rosbag" type="record" name="flight_record" output="screen"
+        args="-o $(arg prefix) --split --size=$(arg split_size)
+              /tf /tf_static /rosout
+              $(arg camera)/color/image_raw/compressed
+              $(arg camera)/color/camera_info
+              $(arg camera)/aligned_depth_to_color/image_raw/compressedDepth
+              $(arg camera)/aligned_depth_to_color/camera_info
+              /$(arg robot_ns)/livox/lidar
+              /$(arg robot_ns)/livox/imu
+              /$(arg robot_ns)/Odometry
+              /$(arg robot_ns)/Odometry_precede
+              /$(arg robot_ns)/imu
+              /$(arg robot_ns)/uav/cog/odom
+              /$(arg robot_ns)/uav/baselink/odom
+              /$(arg robot_ns)/flight_state
+              /$(arg robot_ns)/uav/nav
+              /$(arg robot_ns)/target_pose
+              /$(arg robot_ns)/four_axes/command
+              /$(arg robot_ns)/teleop_command/start
+              /$(arg robot_ns)/teleop_command/takeoff
+              /$(arg robot_ns)/teleop_command/land
+              /$(arg robot_ns)/teleop_command/halt
+              /$(arg robot_ns)/teleop_command/force_landing
+              /$(arg robot_ns)/battery_voltage_status
+              /$(arg robot_ns)/joint_states
+              /$(arg robot_ns)/servo/torque_states
+              /grape_detector/output/rects
+              /grape_detector/output/class
+              /grape_boxes/boxes" />
+</launch>

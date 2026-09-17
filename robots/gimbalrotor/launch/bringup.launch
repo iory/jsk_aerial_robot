@@ -35,6 +35,9 @@
   <!-- grape_detector on the d435 (real machine, grape_with_arm); gazebo runs it on its own, see
        grape_harvest_sim.launch -->
   <arg name="grape_detection" default="$(eval arg('airframe') == 'grape_with_arm')" />
+  <!-- record the flight on the onboard PC (real machine), see launch/include/record.launch.xml -->
+  <arg name="rosbag" default="false" />
+  <arg name="rosbag_prefix" default="$(env HOME)/.ros/gimbalrotor$(arg robot_id)" />
 
   ###########  Parameters  ###########
   <group ns="$(arg robot_ns)">
@@ -101,6 +104,13 @@
     <arg name="room_map" value="$(arg room_map)" />
     <arg name="room_yaw_hint" value="$(arg room_yaw_hint)" />
   </include >
+
+  ##########  Flight record  ##########
+  <include file="$(find gimbalrotor)/launch/include/record.launch.xml"
+           if="$(eval arg('real_machine') and not arg('simulation') and arg('rosbag'))">
+    <arg name="robot_ns" value="$(arg robot_ns)" />
+    <arg name="prefix" value="$(arg rosbag_prefix)" />
+  </include>
 
   ##########  Grape detection  ##########
   <include file="$(find grape_detector)/launch/grape_detection.launch"

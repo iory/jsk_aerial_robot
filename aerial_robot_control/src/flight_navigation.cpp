@@ -416,7 +416,7 @@ void BaseNavigator::joyStickControl(const sensor_msgs::JoyConstPtr & joy_msg)
       if(getNaviState() == LAND_STATE) return;
       if(!teleop_flag_) return; /* can not do the process if other processs are running */
 
-      setNaviState(LAND_STATE);
+      startLand();
       //update
       ROS_INFO("Joy Control: Land state");
 
@@ -650,7 +650,7 @@ void BaseNavigator::update()
 
       if(normal_land && !force_att_control_flag_)
         {
-          setNaviState(LAND_STATE);
+          startLand();
         }
     }
 
@@ -745,7 +745,8 @@ void BaseNavigator::update()
             ROS_INFO("expected land height: %f (current height: %f), velocity: %f ", land_height_, curr_pos.z(), vel);
 
             if (fabs(delta) < land_pos_convergent_thresh_ &&
-                vel > -land_vel_convergent_thresh_)
+                vel > -land_vel_convergent_thresh_ &&
+                getTargetPos().z() < curr_pos.z() - land_target_below_thresh_)
               {
                 ROS_INFO("\n \n ======================  \n Land !!! \n ====================== \n");
                 ROS_INFO("Start disarming motors");
@@ -1122,6 +1123,7 @@ void BaseNavigator::rosParamInit()
   getParam<double>(nh, "z_convergent_thresh", z_convergent_thresh_, 0.05);
   getParam<double>(nh, "xy_convergent_thresh", xy_convergent_thresh_, 0.15);
   getParam<double>(nh, "land_pos_convergent_thresh", land_pos_convergent_thresh_, 0.02);
+  getParam<double>(nh, "land_target_below_thresh", land_target_below_thresh_, 0.1);
   getParam<double>(nh, "land_vel_convergent_thresh", land_vel_convergent_thresh_, 0.05);
 
   //*** trajectory

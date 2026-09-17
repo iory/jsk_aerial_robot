@@ -288,6 +288,9 @@ namespace aerial_robot_navigation
     double z_convergent_thresh_;
     double xy_convergent_thresh_;
     double land_pos_convergent_thresh_;
+    // the robot is taken as landed only when the z target is this much below it: in the air it follows
+    // the descending target, on the ground it can not
+    double land_target_below_thresh_;
     double land_vel_convergent_thresh_;
 
     /* target value */
@@ -494,8 +497,22 @@ namespace aerial_robot_navigation
 
       if(!teleop_flag_) return;
 
-      setNaviState(LAND_STATE);
+      startLand();
       ROS_INFO("Land state");
+    }
+
+    void startLand()
+    {
+      /* during takeoff the z target can still be far above the robot: the descent would start from there,
+         the robot would not move until the target came down to it, and the land check would take the
+         still robot for a landed one and stop the motors in the air */
+      if(getNaviState() == TAKEOFF_STATE)
+        {
+          setTargetZFromCurrentState();
+          ROS_WARN_STREAM("land during takeoff: the z target starts from the current height "
+                          << getTargetPos().z());
+        }
+      setNaviState(LAND_STATE);
     }
 
     void haltCallback(const std_msgs::EmptyConstPtr & msg)
