@@ -30,6 +30,8 @@
   <run_depend>aerial_robot_base</run_depend>
   <run_depend>gazebo_msgs</run_depend>
   <run_depend>realsense2_camera</run_depend>
+  <!-- bringup.launch runs it for grape_with_arm on the real machine -->
+  <run_depend>grape_detector</run_depend>
   <run_depend>compressed_depth_image_transport</run_depend>
   <run_depend>compressed_image_transport</run_depend>
   <run_depend>topic_tools</run_depend>

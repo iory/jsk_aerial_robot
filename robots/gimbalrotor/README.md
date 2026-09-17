@@ -59,8 +59,12 @@ stands in for the contact between the fingers and a stem.
 
 ### real machine
 
+One launch brings up everything on the onboard PC: the flight controller bridge, the arm, the D435, the
+MID360 with fast_lio (`lidar:=`, on with `estimate_mode:=0`), room_localization (with `room_map:=`) and
+grape_detector (`grape_detection:=`, on for grape_with_arm; it picks the NPU of the VIM4 by itself).
+
 ```bash
-roslaunch gimbalrotor bringup.launch airframe:=grape_with_arm
+roslaunch gimbalrotor bringup.launch estimate_mode:=0 airframe:=grape_with_arm room_map:=/path/to/room.pcd
 ```
 
 ## rviz on an operator PC
@@ -81,12 +85,15 @@ The onboard PC reaches the LiDAR over Ethernet and the depth camera over USB.
 
 | sensor | driver | topics |
 | --- | --- | --- |
-| Livox MID360 | `roslaunch livox_ros_driver2 msg_MID360.launch` (commented out in `launch/include/sensors.launch.xml`) | `/livox/lidar` 10 Hz, `/livox/imu` 200 Hz |
+| Livox MID360 and fast_lio | `launch/include/sensors.launch.xml` of `bringup.launch`, on with `estimate_mode:=0` (`lidar:=`) | `<robot_ns>/livox/lidar` 10 Hz, `<robot_ns>/livox/imu` 200 Hz; fast_lio: `<robot_ns>/cloud_registered`, `<robot_ns>/Odometry_precede` (the position of the state estimation) |
 | Intel RealSense D435 | `launch/include/sensors.launch.xml` of `bringup.launch`, `camera:=false` to skip it | `<robot_ns>/camera/color/image_raw`, `.../aligned_depth_to_color/image_raw`, with `compressed` (JPEG) and `compressedDepth` (RVL); gazebo publishes the same topics |
 
 - The LiDAR and the onboard PC must hold the addresses of `livox_ros_driver2/config/MID360_config.json`.
   Otherwise the driver still receives the points but drops them with
   `Storage point data failed, can not get index` and publishes nothing.
+- fast_lio runs in the namespace of the robot, as for dragon: the state estimation (`sensor_plugin/vo`)
+  subscribes to `<robot_ns>/Odometry_precede`. Started outside it, fast_lio publishes `/Odometry_precede`,
+  which nothing reads, and the state estimation gets no position. It uses the IMU of the MID360.
 - The fast_lio cloud goes to the operator PC as `<robot_ns>/lio/cloud`, thinned to `lio_cloud_rate:=`
   (2 Hz) and only while someone subscribes.
 - The D435 cloud is not made on board: it is made on the operator PC from the compressed images, see
@@ -107,10 +114,11 @@ the same robot, so comparing their two poses of the moment gives the transform b
 
 ```bash
 # record the map once, with pcd_save/pcd_save_en of fast_lio on (writes <fast_lio>/PCD/scans.pcd)
-roslaunch livox_ros_driver2 msg_MID360.launch
-roslaunch fast_lio mapping_mid360.launch rviz:=false
+roslaunch gimbalrotor bringup.launch estimate_mode:=0 airframe:=grape_with_arm
 
-# every run, with the lidar driver and fast_lio already running
+# every run: bringup starts room_localization with the map
+roslaunch gimbalrotor bringup.launch estimate_mode:=0 airframe:=grape_with_arm room_map:=/path/to/scans.pcd
+# or on its own, with the lidar driver and fast_lio (in the namespace of the robot) already running
 roslaunch gimbalrotor room_localization.launch map:=/path/to/scans.pcd
 ```
 

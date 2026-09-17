@@ -4,6 +4,11 @@
   <arg name="simulation" default="false" />
   <arg name="robot_ns" default="gimbalrotor" />
   <arg name="camera" default="false" />
+  <!-- livox mid360 and fast_lio, the position of the state estimation with estimate_mode 0 -->
+  <arg name="lidar" default="false" />
+  <!-- a map (pcd) of the room for room_localization.py; empty to run without it -->
+  <arg name="room_map" default="" />
+  <arg name="room_yaw_hint" default="0.0" />
   <!-- rate of the lidar odometry cloud sent to the operator PC [Hz]; fast_lio publishes 10 Hz, 1.6 MB/s -->
   <arg name="lio_cloud_rate" default="2.0" />
 
@@ -40,25 +45,23 @@
         <!-- the lidar odometry cloud for the operator PC, thinned to lio_cloud_rate. lazy: it subscribes
              only while someone watches, and it copies the messages without decoding them -->
         <node pkg="topic_tools" type="throttle" name="lio_cloud_throttle"
-              args="messages /cloud_registered $(arg lio_cloud_rate) lio/cloud">
+              args="messages cloud_registered $(arg lio_cloud_rate) lio/cloud">
           <param name="lazy" value="true" />
         </node>
 
         <!-- mocap -->
         <include file="$(find aerial_robot_base)/launch/external_module/mocap.launch" />
 
-        <!-- livox mid360 & fast lio -->
-        <!-- <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360.launch" /> -->
-        <!-- <include file="$(find fast_lio)/launch/mapping_mid360.launch" > -->
-        <!--   <arg name="rviz" value="false" /> -->
-        <!-- </include> -->
-
-        <!-- imu pipeline to use imu data of spinal for fast lio -->
-        <!-- <node pkg="imu_transformer" type="imu_transformer_node" name="imu_data_transformer" output="screen"> -->
-        <!--   <remap from="imu_in/data" to="sensor_plugin/imu1/ros_converted"/> -->
-        <!--   <remap from="imu_out/data" to="livox/imu_spinal"/> -->
-        <!--   <param name="target_frame" value="$(arg robot_ns)/lidar_imu"/> -->
-        <!-- </node> -->
+        <!-- livox mid360 & fast lio, in the namespace of the robot as for dragon: fast_lio publishes
+             Odometry_precede there, which sensor_plugin/vo of the state estimation subscribes to
+             (config/sensors/lio/livox_mid360.yaml of aerial_robot_base). fast_lio uses the IMU of the
+             MID360 (livox/imu); the pipeline that fed it the IMU of spinal needs imu_transformer. -->
+        <group if="$(arg lidar)">
+          <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360.launch" />
+          <include file="$(find fast_lio)/launch/mapping_mid360.launch" >
+            <arg name="rviz" value="false" />
+          </include>
+        </group>
 
       </group>
     </group>
@@ -75,10 +78,18 @@
     <rosparam file="$(find aerial_robot_base)/config/sensors/mocap.yaml" command="load" />
     <rosparam file="$(find aerial_robot_base)/config/sensors/lio/livox_mid360.yaml" command="load" />
 
-    <!-- overwrite basic parameters to use imu data for fast lio -->
-    <param name="mapping/acc_scale" value="0.101936799"/> <!-- 1/g -->
-    <param name="common/imu_topic" value="livox/imu_spinal"/>
+  </group>
 
+  <!-- the same coordinates on every run: map -> camera_init and map -> world. Outside the namespace
+       of the robot, where config/room.rviz of gimbalrotor_remote looks for its map. -->
+  <group if="$(eval arg('real_machine') and not arg('simulation') and arg('lidar') and arg('room_map') != '')">
+    <include file="$(find gimbalrotor)/launch/room_localization.launch">
+      <arg name="map" value="$(arg room_map)" />
+      <arg name="yaw_hint" value="$(arg room_yaw_hint)" />
+      <arg name="robot_ns" value="$(arg robot_ns)" />
+      <arg name="cloud" value="/$(arg robot_ns)/cloud_registered" />
+      <arg name="lio_odom" value="/$(arg robot_ns)/Odometry" />
+    </include>
   </group>
 
 </launch>

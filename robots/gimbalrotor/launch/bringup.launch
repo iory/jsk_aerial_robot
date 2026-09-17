@@ -26,6 +26,14 @@
   <arg name="arm_control_rate" default="20.0" />
   <!-- realsense d435 (grape_with_arm); the camera frames are in urdf/grape_with_arm/gimbalrotor.urdf.xacro -->
   <arg name="camera" default="$(eval arg('airframe') == 'grape_with_arm')" />
+  <!-- livox mid360 and fast_lio (real machine): the position of estimate_mode 0 -->
+  <arg name="lidar" default="$(eval int(arg('estimate_mode')) == 0)" />
+  <!-- a map (pcd) of the room for script/room_localization.py; empty to run without it -->
+  <arg name="room_map" default="" />
+  <arg name="room_yaw_hint" default="0.0" />
+  <!-- grape_detector on the d435 (real machine, grape_with_arm); gazebo runs it on its own, see
+       grape_harvest_sim.launch -->
+  <arg name="grape_detection" default="$(eval arg('airframe') == 'grape_with_arm')" />
 
   ###########  Parameters  ###########
   <group ns="$(arg robot_ns)">
@@ -88,7 +96,16 @@
     <arg name="simulation" value="$(arg simulation)" />
     <arg name="robot_ns" value="$(arg robot_ns)" />
     <arg name="camera" value="$(arg camera)" />
+    <arg name="lidar" value="$(arg lidar)" />
+    <arg name="room_map" value="$(arg room_map)" />
+    <arg name="room_yaw_hint" value="$(arg room_yaw_hint)" />
   </include >
+
+  ##########  Grape detection  ##########
+  <include file="$(find grape_detector)/launch/grape_detection.launch"
+           if="$(eval arg('real_machine') and not arg('simulation') and arg('camera') and arg('grape_detection'))">
+    <arg name="robot_ns" value="$(arg robot_ns)" />
+  </include>
 
   ###########  Servo Bridge  ###########
   <node pkg="aerial_robot_model" type="servo_bridge_node" name="servo_bridge" ns="$(arg robot_ns)" output="screen"/>

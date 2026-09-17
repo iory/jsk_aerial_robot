@@ -52,7 +52,7 @@ alone opens `config/arm.rviz` (no map, world frame), which suits gazebo; `rviz_c
 - `LidarCloud` (`/gimbalrotor/lio/cloud`, on): the fast_lio cloud. The robot thins it to `lio_cloud_rate`
   of bringup (2 Hz; fast_lio publishes 10 Hz, 1.6 MB/s) with a lazy `topic_tools/throttle`, so it is sent
   only while the display is enabled; measured 0.29 MB/s over the network and 0.5 % of one onboard core. It
-  lies on the room map when the localization is right. (`/livox/lidar` of the driver is the livox
+  lies on the room map when the localization is right. (`/gimbalrotor/livox/lidar` of the driver is the livox
   CustomMsg fast_lio needs, which rviz cannot show.)
 - `CameraCloud` (`rviz/DepthCloud`, on, in `arm.rviz` and `room.rviz`): the D435 cloud, made by rviz on
   this PC from the compressed images of the robot (`compressedDepth` with RVL for the depth, `compressed`
