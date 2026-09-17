@@ -25,6 +25,7 @@ Parameters
 """
 
 import threading
+import xml.etree.ElementTree as ET
 
 from controller_manager_msgs.srv import ListControllers
 from controller_manager_msgs.srv import LoadController
@@ -93,11 +94,17 @@ class ServoTorqueSim(object):
         self.namespace = rospy.get_namespace().rstrip("/")
         self.lock = threading.Lock()
         self.servos = {}  # servo id -> SimServo
+        # servo_bridge ignores a servo of a joint which is not in the robot model (a module taken off)
+        model_joints = {j.get("name") for j in ET.fromstring(rospy.get_param("robot_description")).iter("joint")}
         for group, group_params in rospy.get_param("servo_controller").items():
             if not isinstance(group_params, dict):
                 continue
             for key, servo in group_params.items():
                 if key.startswith("controller") and isinstance(servo, dict) and "id" in servo and "name" in servo:
+                    if servo["name"] not in model_joints:
+                        rospy.logwarn("[servo torque sim] joint %s of %s is not in the robot model, ignore this servo",
+                                      servo["name"], key)
+                        continue
                     damping = torque_off_damping(servo.get("simulation", {}), group_params.get("simulation", {}))
                     self.servos[int(servo["id"])] = SimServo(self.namespace, group, key, servo["name"], damping)
         if not self.servos:

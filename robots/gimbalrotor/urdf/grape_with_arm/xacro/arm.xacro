@@ -7,7 +7,9 @@
   <xacro:include filename="$(find gimbalrotor)/urdf/grape_with_arm/xacro/screw_drive_module_dynamixel.xacro"/>
   <xacro:include filename="$(find gimbalrotor)/urdf/grape_with_arm/xacro/vial_pick_module.xacro"/>
 
-  <xacro:macro name="arm" params="parent_link:=main_body xyz:='0.0995 0.0 -0.0465' rpy:='3.141592653589793 1.5707926535897934 3.141592653589793'">
+  <!-- with_pipe: false for the arm cut after the 90deg module (the 200mm pipe and all that follows it
+       taken off the real robot), so that the model keeps only joint1 and the 90deg module -->
+  <xacro:macro name="arm" params="parent_link:=main_body xyz:='0.0995 0.0 -0.0465' rpy:='3.141592653589793 1.5707926535897934 3.141592653589793' with_pipe:=true">
     <!-- Dummy link to attach the arm to the main body -->
     <link name="arm_dummy_link"/>
     <joint name="arm_dummy_joint" type="fixed">
@@ -30,6 +32,7 @@
       xyz="0 0 0"
       rpy="0 3.14 -3.14159"/>
 
+    <xacro:if value="${with_pipe}">
     <!-- 200mm pipe module -->
     <xacro:screw_200mmpipe_module
       prefix="arm_pipe_"
@@ -78,6 +81,7 @@
       parent_joint="arm_joint5_joint1"
       xyz="0 0 0"
       rpy="0 0 0"/>
+    </xacro:if>
 
     <!-- Transmissions for arm joints (required for Gazebo control) -->
     <transmission name="arm_joint1_tran">
@@ -91,6 +95,7 @@
       </actuator>
     </transmission>
 
+    <xacro:if value="${with_pipe}">
     <transmission name="arm_joint2_tran">
       <type>transmission_interface/SimpleTransmission</type>
       <joint name="arm_joint2_joint1">
@@ -134,5 +139,6 @@
         <mechanicalReduction>1</mechanicalReduction>
       </actuator>
     </transmission>
+    </xacro:if>
   </xacro:macro>
 </robot>

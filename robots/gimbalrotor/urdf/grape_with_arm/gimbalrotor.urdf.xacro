@@ -510,6 +510,8 @@
   <xacro:d435_sensor_frame name="color"  y="0.015"/>
 
   <!-- Include the arm macro -->
-  <xacro:arm parent_link="main_body"/>
+  <!-- arm_pipe:=false: the arm without the 200mm pipe and what follows it (joint1 and the 90deg module only) -->
+  <xacro:arg name="arm_pipe" default="true"/>
+  <xacro:arm parent_link="main_body" with_pipe="$(arg arm_pipe)"/>
 
 </robot>
