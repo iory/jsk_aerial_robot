@@ -29,6 +29,7 @@
        off): the robot model keeps joint1 and the 90deg module only, and the arm controller, which needs
        all the joints, is not started -->
   <arg name="arm_pipe" default="true" />
+  <arg name="takeoff_height" default="" />
   <arg name="launch_arm_controller" default="$(eval arg('airframe') == 'grape_with_arm' and arg('arm_pipe'))" />
   <arg name="arm_control_rate" default="20.0" />
   <!-- realsense d435 (grape_with_arm); the camera frames are in urdf/grape_with_arm/gimbalrotor.urdf.xacro -->
@@ -79,6 +80,9 @@
    ###########  Navigation  ###########
    <param name="flight_navigation_plugin_name" value="aerial_robot_navigation/gimbalrotor_navigation" />
    <rosparam file="$(arg config_dir)/NavigationConfig.yaml" command="load" />
+   <!-- takeoff_height:=<m> replaces the takeoff height of NavigationConfig.yaml (above the height at arming on
+        the real machine with the lidar) -->
+   <param if="$(eval arg('takeoff_height') != '')" name="navigation/takeoff_height" value="$(arg takeoff_height)" />
 
   </group>
 
