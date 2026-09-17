@@ -26,9 +26,13 @@ controller:
     force_landing_descending_rate: -0.5
 
   roll_pitch:
-    p_gain: 15.0
-    i_gain: 1.0
-    d_gain: 10.0
+    # sized on the hover of 2026-09-17 22:34 (debug/pose/pid): the pitch acceleration follows the command
+    # of the controller with 0.40 of its size and 0.28 s later (r2 0.88); 15/1/10 is on the edge of
+    # stability for that (a simulation of it shakes by 20 deg at 0.67 Hz, as the robot did by 6 deg rms at
+    # 0.5-0.7 Hz), 6/2/5 stays stable for 0.3-1.0 of the size and up to 0.28-0.36 s
+    p_gain: 6.0
+    i_gain: 2.0
+    d_gain: 5.0
     limit_sum: 20.0
     limit_p: 20.0
     limit_i: 20.0
