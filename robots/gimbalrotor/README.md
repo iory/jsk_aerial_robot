@@ -116,8 +116,11 @@ the same robot, so comparing their two poses of the moment gives the transform b
 # record the map once, with pcd_save/pcd_save_en of fast_lio on (writes <fast_lio>/PCD/scans.pcd)
 roslaunch gimbalrotor bringup.launch estimate_mode:=0 airframe:=grape_with_arm
 
-# every run: bringup starts room_localization with the map
-roslaunch gimbalrotor bringup.launch estimate_mode:=0 airframe:=grape_with_arm room_map:=/path/to/scans.pcd
+# thin it for git: xyz only, one point per 5 cm (146 MB -> 3.3 MB); the match thins to 0.1 m anyway
+rosrun gimbalrotor thin_room_map.py scans.pcd maps/<room>.pcd 0.05
+
+# every run: bringup starts room_localization with the map, given by a path or by its name in maps/
+roslaunch gimbalrotor bringup.launch estimate_mode:=0 airframe:=grape_with_arm room_map:=room_20260916
 # or on its own, with the lidar driver and fast_lio (in the namespace of the robot) already running
 roslaunch gimbalrotor room_localization.launch map:=/path/to/scans.pcd
 ```
@@ -130,6 +133,12 @@ inside the room decides; `yaw_hint:=` only breaks a tie. `~relocalize` (std_srvs
 Carrying the robot once around the room gives a map with all the walls in it. Measured on the real machine
 with such a map, two runs put the same standing robot within 0.02 m and 1.3 deg of each other, and within
 0.08 m and 2.9 deg of where the map says it is.
+
+`maps/room_20260916.pcd` is the room of the VIM4 recorded on 2026-09-16, thinned to 5 cm. On 2026-09-17,
+with fast_lio in the namespace of the robot (bringup) and the robot standing still (fast_lio within 3 cm
+and 0.5 deg over 35 s), repeated matches against the full map of that room spread over 0.5 m and 6 deg,
+and the thinned maps (2, 3 and 5 cm) fell within the same spread; the repeatability above was not
+reached that day, so check the match (`~relocalize`, rviz) before a flight that relies on the map.
 
 The map frame is level even though the lidar of grape_with_arm is mounted upside down: the roll and pitch of
 the lidar in the robot model (`~base_frame` -> `~lidar_frame`) are taken off the recorded map and the run

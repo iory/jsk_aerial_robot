@@ -6,7 +6,8 @@
   <arg name="camera" default="false" />
   <!-- livox mid360 and fast_lio, the position of the state estimation with estimate_mode 0 -->
   <arg name="lidar" default="false" />
-  <!-- a map (pcd) of the room for room_localization.py; empty to run without it -->
+  <!-- a map (pcd) of the room for room_localization.py: a path, or the name of a map in maps/ of this
+       package (e.g. room_20260916); empty to run without it -->
   <arg name="room_map" default="" />
   <arg name="room_yaw_hint" default="0.0" />
   <!-- rate of the lidar odometry cloud sent to the operator PC [Hz]; fast_lio publishes 10 Hz, 1.6 MB/s -->
@@ -84,7 +85,7 @@
        of the robot, where config/room.rviz of gimbalrotor_remote looks for its map. -->
   <group if="$(eval arg('real_machine') and not arg('simulation') and arg('lidar') and arg('room_map') != '')">
     <include file="$(find gimbalrotor)/launch/room_localization.launch">
-      <arg name="map" value="$(arg room_map)" />
+      <arg name="map" value="$(eval arg('room_map') if arg('room_map').startswith('/') else find('gimbalrotor') + '/maps/' + arg('room_map') + ('' if arg('room_map').endswith('.pcd') else '.pcd'))" />
       <arg name="yaw_hint" value="$(arg room_yaw_hint)" />
       <arg name="robot_ns" value="$(arg robot_ns)" />
       <arg name="cloud" value="/$(arg robot_ns)/cloud_registered" />

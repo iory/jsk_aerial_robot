@@ -28,7 +28,8 @@
   <arg name="camera" default="$(eval arg('airframe') == 'grape_with_arm')" />
   <!-- livox mid360 and fast_lio (real machine): the position of estimate_mode 0 -->
   <arg name="lidar" default="$(eval int(arg('estimate_mode')) == 0)" />
-  <!-- a map (pcd) of the room for script/room_localization.py; empty to run without it -->
+  <!-- a map (pcd) of the room for script/room_localization.py: a path, or the name of a map in maps/
+       (e.g. room_20260916); empty to run without it -->
   <arg name="room_map" default="" />
   <arg name="room_yaw_hint" default="0.0" />
   <!-- grape_detector on the d435 (real machine, grape_with_arm); gazebo runs it on its own, see
