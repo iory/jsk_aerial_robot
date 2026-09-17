@@ -81,6 +81,16 @@ namespace aerial_robot_control
     double landing_err_z_;
     double safe_landing_height_;
     double force_landing_descending_rate_;
+    /* takeoff: the x / y control is held at zero until this height above the height at arming
+       (xy/start_control_height, 0: never held), so that a robot which is light on the ground is not pushed
+       sideways by it; and a feedforward acceleration (z/takeoff_feedforward_acc, e.g. near g) is ramped in
+       over z/takeoff_feedforward_ramp_time [s] from the takeoff, so that the thrust does not have to come
+       from the I term (about 2 N/s), which kept the robot light on the ground for 10-20 s */
+    double start_xy_control_height_;
+    double stop_xy_control_height_;  // xy/stop_control_height: in a landing, below this height above the arming height
+    double takeoff_feedforward_acc_;
+    double takeoff_feedforward_ramp_time_;
+    double takeoff_start_time_;
 
     tf::Vector3 pos_, target_pos_;
     tf::Vector3 vel_, target_vel_;

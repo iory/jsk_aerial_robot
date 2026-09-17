@@ -32,6 +32,8 @@
   <arg name="takeoff_height" default="" />
   <!-- gazebo: the rotor and gimbal servo delays of the real machine (config/<airframe>/SimulationActuatorDelay.yaml) -->
   <arg name="sim_actuator_delay" default="false" />
+  <!-- gazebo with the control config of the real machine (GimbalrotorControl.yaml) instead of the _sim one -->
+  <arg name="sim_real_control_config" default="false" />
   <arg name="sim_actuator_delay_file" default="$(arg config_dir)/$(arg airframe)/SimulationActuatorDelay.yaml" />
   <!-- gazebo: "ixx,iyy,izz" (or with spaces) [kg m2] added to the body of the spawned robot (grape_with_arm), e.g. the inertia
        measured in flight, while the controller keeps the robot model -->
@@ -79,8 +81,10 @@
    <rosparam file="$(arg config_dir)/Battery.yaml" command="load" />
 
    ###########  Control  ###########
-   <rosparam file="$(arg config_dir)/$(arg airframe)/GimbalrotorControl.yaml" command="load" unless="$(arg simulation)"/>
-   <rosparam file="$(arg config_dir)/$(arg airframe)/GimbalrotorControl_sim.yaml" command="load" if="$(arg simulation)"/>
+   <rosparam file="$(arg config_dir)/$(arg airframe)/GimbalrotorControl.yaml" command="load"
+             if="$(eval not arg('simulation') or arg('sim_real_control_config'))"/>
+   <rosparam file="$(arg config_dir)/$(arg airframe)/GimbalrotorControl_sim.yaml" command="load"
+             if="$(eval arg('simulation') and not arg('sim_real_control_config'))"/>
    <param if="$(eval arg('gimbal_lag_compensation') != '')" name="controller/gimbal_lag_compensation"
           value="$(arg gimbal_lag_compensation)" />
    <rosparam if="$(eval arg('simulation') and arg('sim_actuator_delay'))"

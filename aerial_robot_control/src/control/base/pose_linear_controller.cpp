@@ -47,7 +47,7 @@ namespace aerial_robot_control
     rpy_(0,0,0), target_rpy_(0,0,0),
     target_acc_(0,0,0),
     target_omega_(0,0,0),
-    start_rp_integration_(false)
+    start_rp_integration_(false), start_xy_control_height_(0), stop_xy_control_height_(0), takeoff_feedforward_acc_(0), takeoff_feedforward_ramp_time_(2.0), takeoff_start_time_(-1)
   {
     pid_msg_.x.total.resize(1);
     pid_msg_.x.p_term.resize(1);
@@ -139,7 +139,12 @@ namespace aerial_robot_control
         pid_reconf_servers_.back()->setCallback(boost::bind(&PoseLinearController::cfgPidCallback, this, _1, _2, std::vector<int>(1, Y)));
       }
 
+    getParam<double>(xy_nh, "start_control_height", start_xy_control_height_, 0.0);
+    getParam<double>(xy_nh, "stop_control_height", stop_xy_control_height_, 0.0);
+
     /* z */
+    getParam<double>(z_nh, "takeoff_feedforward_acc", takeoff_feedforward_acc_, 0.0);
+    getParam<double>(z_nh, "takeoff_feedforward_ramp_time", takeoff_feedforward_ramp_time_, 2.0);
     getParam<double>(z_nh, "force_landing_descending_rate",  force_landing_descending_rate_, -0.1);
     if(force_landing_descending_rate_ >= 0) force_landing_descending_rate_ = -0.1;
     loadParam(z_nh);
@@ -188,6 +193,7 @@ namespace aerial_robot_control
   {
     ControlBase::reset();
     start_rp_integration_ = false;
+    takeoff_start_time_ = -1;
 
     for(auto& controller: pid_controllers_) controller.reset();
 
@@ -258,6 +264,18 @@ namespace aerial_robot_control
         pid_controllers_.at(Y).reset();
       }
 
+    /* near the ground the x / y control is held at zero: before the liftoff, and at the end of a landing,
+       where with little thrust it asks for large gimbal tilts and pushes the robot sideways */
+    const uint8_t navi_state = navigator_->getNaviState();
+    const double height = pos_.z() - navigator_->getInitHeight();
+    const bool on_ground_in_takeoff = navi_state == aerial_robot_navigation::TAKEOFF_STATE && height < start_xy_control_height_;
+    const bool near_ground_in_landing = navi_state == aerial_robot_navigation::LAND_STATE && height < stop_xy_control_height_;
+    if(on_ground_in_takeoff || near_ground_in_landing)
+      {
+        pid_controllers_.at(X).reset();
+        pid_controllers_.at(Y).reset();
+      }
+
     // z
     double err_z = target_pos_.z() - pos_.z();
     double err_v_z = target_vel_.z() - vel_.z();
@@ -272,9 +290,28 @@ namespace aerial_robot_control
         target_acc_.setZ(0);
       }
 
-    pid_controllers_.at(Z).update(err_z, du_z, err_v_z, target_acc_.z());
+    double z_feedforward = target_acc_.z();
+    if(takeoff_feedforward_acc_ > 0 && !navigator_->getForceLandingFlag())
+      {
+        const uint8_t state = navigator_->getNaviState();
+        if(state == aerial_robot_navigation::TAKEOFF_STATE && takeoff_start_time_ < 0)
+          takeoff_start_time_ = ros::Time::now().toSec();
+        if(takeoff_start_time_ > 0 && (state == aerial_robot_navigation::TAKEOFF_STATE ||
+                                       state == aerial_robot_navigation::HOVER_STATE ||
+                                       state == aerial_robot_navigation::LAND_STATE))
+          {
+            const double ramp = takeoff_feedforward_ramp_time_ > 0 ?
+              std::min(1.0, (ros::Time::now().toSec() - takeoff_start_time_) / takeoff_feedforward_ramp_time_) : 1.0;
+            z_feedforward += ramp * takeoff_feedforward_acc_;
+          }
+      }
+    pid_controllers_.at(Z).update(err_z, du_z, err_v_z, z_feedforward);
 
-    if(pid_controllers_.at(Z).getErrI() < 0) pid_controllers_.at(Z).setErrI(0);
+    /* no negative I term on its own; with the takeoff feedforward it may cancel that (a thrust curve or a
+       mass off from the model), down to the feedforward */
+    const double z_i_gain = pid_controllers_.at(Z).getIGain();
+    const double err_i_min = (z_i_gain > 0 && z_feedforward > target_acc_.z()) ? -(z_feedforward - target_acc_.z()) / z_i_gain : 0.0;
+    if(pid_controllers_.at(Z).getErrI() < err_i_min) pid_controllers_.at(Z).setErrI(err_i_min);
 
     if(navigator_->getForceLandingFlag())
       {

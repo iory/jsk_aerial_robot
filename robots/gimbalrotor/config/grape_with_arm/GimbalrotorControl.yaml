@@ -10,6 +10,12 @@ controller:
   gimbal_angle_limit: 0.785
 
   xy:
+    # takeoff: no x / y control until 5 cm above the height at arming; on the ground the robot slid and
+    # turned forward under it as it got light (2026-09-18)
+    start_control_height: 0.05
+    # landing: no x / y control below 15 cm; with little thrust it asked for gimbal tilts at the limit and
+    # pushed the robot 0.1-0.4 m sideways (gazebo)
+    stop_control_height: 0.15
     p_gain: 3.0
     i_gain: 0.1
     d_gain: 1.0
@@ -19,6 +25,10 @@ controller:
     limit_d: 12.0
 
   z:
+    # takeoff: this acceleration (a little under g) is ramped in over 1.5 s, so that the thrust does not
+    # have to come from the I term at about 2 N/s, which kept the robot light on the ground for 12-20 s
+    takeoff_feedforward_acc: 9.0
+    takeoff_feedforward_ramp_time: 1.5
     p_gain: 5.0
     i_gain: 1.0
     d_gain: 2.5
