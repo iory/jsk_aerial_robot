@@ -74,6 +74,7 @@ if(GIMBALROTOR_BUILD_SKROBOT_INTERFACE)
     script/estimate_cog_from_flight.py
     script/excite_attitude.py
     script/analyze_excitation.py
+    script/analyze_hover_loop.py
     script/thin_room_map.py
     DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
     )

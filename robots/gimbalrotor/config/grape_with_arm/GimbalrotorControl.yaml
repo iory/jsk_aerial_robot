@@ -32,18 +32,28 @@ controller:
     start_rp_integration_height: 0.1
 
   pitch:
+    # sized in gazebo with the actuator delays of the real machine (bringup sim_actuator_delay:=true, which
+    # reproduces the 6-7 deg rms roll / pitch wobble of the hovers of 2026-09-17 with 15/1/10), over the
+    # model inertia and twice it, and the measured delays and 1.5 times them: 15/1/6 hovered in all four
+    # within 2.5 deg rms (6.6 deg at most), where 15/1/10 turned over with the slower delays and d gains of
+    # 8 shook by 10-15 deg
     p_gain: 15.0
     i_gain: 1.0
-    d_gain: 10.0
+    d_gain: 6.0
     limit_sum: 20.0
     limit_p: 20.0
     limit_i: 20.0
     limit_d: 20.0
 
   roll:
+    # sized in gazebo with the actuator delays of the real machine (bringup sim_actuator_delay:=true, which
+    # reproduces the 6-7 deg rms roll / pitch wobble of the hovers of 2026-09-17 with 15/1/10), over the
+    # model inertia and twice it, and the measured delays and 1.5 times them: 15/1/6 hovered in all four
+    # within 2.5 deg rms (6.6 deg at most), where 15/1/10 turned over with the slower delays and d gains of
+    # 8 shook by 10-15 deg
     p_gain: 15.0
     i_gain: 1.0
-    d_gain: 8.0
+    d_gain: 6.0
     limit_sum: 20.0
     limit_p: 20.0
     limit_i: 20.0
