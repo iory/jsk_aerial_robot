@@ -8,10 +8,12 @@
     </joint>
     <link name="${prefix}base_link">
       <inertial>
-        <origin xyz="0.0314472120441254 0.0185600648406693 0.999996863971173" rpy="0.0 -0.0 0.0"/>
+        <!-- the pipe runs along z from the base (0) to the next module (0.221): the centroid and the
+             inertia were in the frame of the CAD export (1 m away, long axis on x), see the visual origin -->
+        <origin xyz="0.0 0.0 0.1105" rpy="0.0 0.0 0.0"/>
         <!-- <mass value="0.0784"/> -->
 	<mass value="0.0807"/>
-        <inertia ixx="1.92067336342704e-05" ixy="4.86844738251007e-08" ixz="-3.58103918098541e-08" iyy="0.000556258110321859" iyz="-3.52324723813976e-10" izz="0.000556910936857427"/>
+        <inertia ixx="0.000556910936857427" ixy="0.0" ixz="0.0" iyy="0.000556258110321859" iyz="0.0" izz="1.92067336342704e-05"/>
       </inertial>
       <visual>
         <geometry>
