@@ -71,6 +71,7 @@ if(GIMBALROTOR_BUILD_SKROBOT_INTERFACE)
     script/make_grape_vineyard_world.py
     script/skrobot_go_and_return.py
     script/skrobot_grape_harvest_demo.py
+    script/estimate_cog_from_flight.py
     script/thin_room_map.py
     DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
     )

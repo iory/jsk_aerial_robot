@@ -6,6 +6,8 @@
     gimbalrotor_remote/launch/camera_remote.launch makes the camera cloud from the bag as it does live
   - the MID360 (livox/lidar, livox/imu), from which fast_lio can be run again, and fast_lio's odometry
   - the state estimation, the flight state and commands, the IMU of spinal, the arm and grape_detector
+  - the motor outputs of spinal (motor_pwms) with its attitude PID terms, from which
+    script/estimate_cog_from_flight.py estimates the real centroid
 
   bringup.launch includes it with rosbag:=true. The camera images are compressed only while someone
   subscribes, so recording them costs the onboard CPU what a remote rviz showing them does.
@@ -35,6 +37,11 @@
               /$(arg robot_ns)/uav/nav
               /$(arg robot_ns)/target_pose
               /$(arg robot_ns)/four_axes/command
+              /$(arg robot_ns)/motor_pwms
+              /$(arg robot_ns)/rpy/pid
+              /$(arg robot_ns)/rpy/feedback_state
+              /$(arg robot_ns)/gimbals_ctrl
+              /$(arg robot_ns)/esc_telem
               /$(arg robot_ns)/teleop_command/start
               /$(arg robot_ns)/teleop_command/takeoff
               /$(arg robot_ns)/teleop_command/land
