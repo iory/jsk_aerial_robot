@@ -61,7 +61,10 @@
   <link name="main_body">
     <inertial>
       <!-- <origin xyz="-0.0041019 0.0000721 -0.0183334" rpy="0.0 -0.0 0.0"/> -->
-      <origin xyz="0.0178508 0.0018366 -0.03525" rpy="0.0 -0.0 0.0"/>
+      <!-- x was 0.0178508 (CAD): the motor outputs of a hover without the arm pipe (2026-09-17 21:37, script/
+           estimate_cog_from_flight.py) put the centroid of the robot 8.3 mm behind the model, which flew arm
+           side up by 6-15 deg; the body centroid is moved by 8.3 mm * 3.395 kg / 1.865 kg -->
+      <origin xyz="0.0027468 0.0018366 -0.03525" rpy="0.0 -0.0 0.0"/>
       <!-- <mass value="1.3193189"/> -->
       <!-- <mass value="2.0421872">/ -->
       <mass value="1.8654999"/>
