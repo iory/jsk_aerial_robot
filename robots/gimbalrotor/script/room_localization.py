@@ -32,9 +32,12 @@ Parameters
 ~map_frame : str, ~odom_frame : str
     Frames of the transform (default: map and camera_init).
 ~world_frame : str
-    Frame of the state estimation. When ``~robot_odom`` and ``~lio_odom`` are both received, the
-    transform ``~map_frame -> ~world_frame`` is published as well, which is what a flight target given
-    in map coordinates is converted with (default: world; empty to skip it).
+    Frame of the state estimation, whose ``~map_frame -> ~world_frame`` is what a flight target given in
+    map coordinates is converted with (default: world; empty to skip it). When the state estimation
+    fuses the lidar odometry, it publishes ``~world_frame -> ~odom_frame`` itself (sensor_plugin/vo of
+    aerial_robot_estimation); ``~odom_frame`` then has that parent, and this node publishes only
+    ``~map_frame -> ~world_frame``, from it. Otherwise it publishes ``~map_frame -> ~odom_frame``, and
+    ``~map_frame -> ~world_frame`` as well when ``~robot_odom`` and ``~lio_odom`` are both received.
 ~robot_ns : str
     Namespace of the robot, which names its frames (default: the namespace of the node, or gimbalrotor).
 ~robot_odom : str
@@ -104,6 +107,7 @@ from sensor_msgs.msg import PointCloud2
 from sensor_msgs.msg import PointField
 from std_srvs.srv import Empty
 from std_srvs.srv import EmptyResponse
+from tf2_msgs.msg import TFMessage
 
 
 def load_pcd_xyz(path):
@@ -422,6 +426,9 @@ class RoomLocalization(object):
         self.clouds = []
         self.robot_odom = None
         self.lio_odom = None
+        # world -> odom of the state estimation, if it publishes one, and the last map -> odom
+        self.world_to_odom = None
+        self.map_to_odom = None
         self.broadcaster = tf2_ros.StaticTransformBroadcaster()
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
@@ -445,6 +452,8 @@ class RoomLocalization(object):
         self.sub = rospy.Subscriber(rospy.get_param('~cloud', '/cloud_registered'), PointCloud2,
                                     self.cloud_callback, queue_size=5)
         if self.world_frame:
+            for topic in ('/tf_static', '/tf'):
+                rospy.Subscriber(topic, TFMessage, self.tf_callback, queue_size=100)
             rospy.Subscriber(rospy.get_param('~robot_odom', '/' + robot_ns + '/uav/baselink/odom'), Odometry,
                              self.robot_odom_callback, queue_size=1)
             rospy.Subscriber(rospy.get_param('~lio_odom', '/Odometry'), Odometry,
@@ -523,6 +532,26 @@ class RoomLocalization(object):
 
     def lio_odom_callback(self, msg):
         self.lio_odom = msg
+
+    def tf_callback(self, msg):
+        """Keep world -> odom when the state estimation publishes it.
+
+        Read from the messages rather than from the tf buffer, where odom may hang from the map -> odom
+        this node published before.
+        """
+        for transform in msg.transforms:
+            if (transform.header.frame_id.strip('/') != self.world_frame.strip('/')
+                    or transform.child_frame_id.strip('/') != self.odom_frame.strip('/')):
+                continue
+            world_to_odom = matrix_of_pose(transform.transform.translation, transform.transform.rotation)
+            first = self.world_to_odom is None
+            self.world_to_odom = world_to_odom
+            if first:
+                rospy.loginfo('[room localization] %s publishes %s -> %s: publishing %s -> %s only',
+                              msg._connection_header.get('callerid', 'a node'), self.world_frame,
+                              self.odom_frame, self.map_frame, self.world_frame)
+                if self.map_to_odom is not None:
+                    self.publish(self.map_to_odom, 'the last match')
 
     def world_transform(self, map_to_odom):
         """The map frame in the world frame of the state estimation, or None.
@@ -628,21 +657,35 @@ class RoomLocalization(object):
         return True
 
     def publish(self, map_to_odom, source):
-        """Publish map -> odom, and map -> world when the robot odometry is there."""
+        """Publish map -> odom, and map -> world when the robot odometry is there.
+
+        When the state estimation publishes world -> odom, odom already has a parent, and a second one
+        (map) would make it flip between the two in every tf user: only map -> world is published then.
+        """
+        self.map_to_odom = map_to_odom
         shift, yaw = planar_of(map_to_odom)
         rospy.loginfo('[room localization] %s -> %s from %s: translation (%.3f, %.3f) m, rotation %.2f deg',
                       self.map_frame, self.odom_frame, source, shift[0], shift[1], np.degrees(yaw))
+        world_to_odom = self.world_to_odom
+        if self.world_frame and world_to_odom is not None:
+            map_to_world = map_to_odom.dot(np.linalg.inv(world_to_odom))
+            self.log_world(map_to_world)
+            self.broadcaster.sendTransform([self.transform_msg(self.world_frame, map_to_world)])
+            return
         transforms = [self.transform_msg(self.odom_frame, map_to_odom)]
         if self.world_frame:
             map_to_world = self.world_transform(map_to_odom)
             if map_to_world is not None:
-                translation = map_to_world[:3, 3]
-                world_yaw = np.arctan2(map_to_world[1, 0], map_to_world[0, 0])
-                rospy.loginfo('[room localization] %s -> %s: translation (%.3f, %.3f, %.3f) m, '
-                              'rotation %.2f deg', self.map_frame, self.world_frame, translation[0],
-                              translation[1], translation[2], np.degrees(world_yaw))
+                self.log_world(map_to_world)
                 transforms.append(self.transform_msg(self.world_frame, map_to_world))
         self.broadcaster.sendTransform(transforms)
+
+    def log_world(self, map_to_world):
+        translation = map_to_world[:3, 3]
+        world_yaw = np.arctan2(map_to_world[1, 0], map_to_world[0, 0])
+        rospy.loginfo('[room localization] %s -> %s: translation (%.3f, %.3f, %.3f) m, rotation %.2f deg',
+                      self.map_frame, self.world_frame, translation[0], translation[1], translation[2],
+                      np.degrees(world_yaw))
 
     def transform_msg(self, child_frame, matrix):
         quaternion = tft.quaternion_from_matrix(matrix)
