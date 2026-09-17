@@ -53,10 +53,11 @@ controller:
   pitch:
     # 10 until 2026-09-17: the hovers shook by about 6 deg rms, which gazebo with the actuator delays of the
     # real machine reproduces (8 deg), and 8 does not there (0.5 deg). 6, the best in gazebo, ran away forward
-    # on the real machine (23:52, not recorded), so 8, the same as the roll, is the next step
+    # on the real machine (23:52, not recorded). 10 again for the first flight with the takeoff feedforward
+    # and the lower xy gains: at the slowest calibrated plants 8 was the first to turn over
     p_gain: 15.0
     i_gain: 1.0
-    d_gain: 8.0
+    d_gain: 10.0
     limit_sum: 20.0
     limit_p: 20.0
     limit_i: 20.0
@@ -65,7 +66,7 @@ controller:
   roll:
     p_gain: 15.0
     i_gain: 1.0
-    d_gain: 8.0
+    d_gain: 10.0
     limit_sum: 20.0
     limit_p: 20.0
     limit_i: 20.0
