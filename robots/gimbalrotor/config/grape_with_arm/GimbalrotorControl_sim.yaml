@@ -4,6 +4,10 @@ controller:
   torque_allocation_matrix_inv_pub_interval: 0.05
   wrench_allocation_matrix_pub_interval: 0.1
   gimbal_calc_in_fc : false
+  # [rad] 45 deg: with little thrust (a landing) the side force of the position control asked for gimbal
+  # angles beyond 90 deg (71 deg on the real machine on 2026-09-18, up to 174 deg in gazebo with the real
+  # actuator delays), where the limit kept the landing drift and the liftoff tilt smaller
+  gimbal_angle_limit: 0.785
 
   xy:
     p_gain: 2.0

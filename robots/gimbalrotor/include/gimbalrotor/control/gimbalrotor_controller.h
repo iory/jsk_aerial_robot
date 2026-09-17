@@ -51,6 +51,9 @@ private:
   /* gimbal lag compensation: the thrusts are re-allocated on the measured gimbal angles, so that the fast
      thrusts give the z force and the roll / pitch torque the gimbals do not give yet */
   bool gimbal_lag_compensation_ = false;
+  /* the largest gimbal angle commanded [rad], 0 for none: with little thrust (a landing) a side force asks
+     for any tilt, up to the rotor pointing sideways or down */
+  double gimbal_angle_limit_ = 0.0;
   double gimbal_lag_compensation_limit_ = 2.0;  // [N] per rotor
   ros::Publisher thrust_correction_pub_;
   void compensateGimbalLag(const Eigen::VectorXd& target_wrench_acc_cog, const Eigen::Matrix3d& inertia_inv,

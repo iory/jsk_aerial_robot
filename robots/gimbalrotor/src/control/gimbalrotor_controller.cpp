@@ -52,6 +52,7 @@ void GimbalrotorController::rosParamInit()
   getParam<bool>(control_nh, "underactuate", underactuate_, false);
   getParam<bool>(control_nh, "gimbal_lag_compensation", gimbal_lag_compensation_, false);
   getParam<double>(control_nh, "gimbal_lag_compensation_limit", gimbal_lag_compensation_limit_, 2.0);
+  getParam<double>(control_nh, "gimbal_angle_limit", gimbal_angle_limit_, 0.0);
 }
 
 bool GimbalrotorController::update()
@@ -241,6 +242,9 @@ void GimbalrotorController::controlCore()
     if (gimbal_dof_ == 1)
     {
       target_gimbal_angles_.at(i) = atan2(-f_i_integrated[0], f_i_integrated[1]);
+      if (gimbal_angle_limit_ > 0)
+        target_gimbal_angles_.at(i) =
+            std::max(-gimbal_angle_limit_, std::min(gimbal_angle_limit_, target_gimbal_angles_.at(i)));
     }
     else if (gimbal_dof_ == 2)
     {
