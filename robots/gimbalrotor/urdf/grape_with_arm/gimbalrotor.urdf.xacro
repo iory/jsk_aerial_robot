@@ -61,21 +61,25 @@
   <link name="main_body">
     <inertial>
       <!-- <origin xyz="-0.0041019 0.0000721 -0.0183334" rpy="0.0 -0.0 0.0"/> -->
-      <!-- x was 0.0178508 (CAD): the motor outputs of a hover without the arm pipe (2026-09-17 21:37, script/
-           estimate_cog_from_flight.py) put the centroid of the robot 8.3 mm behind the model, which flew arm
-           side up by 6-15 deg; the body centroid is moved by 8.3 mm * 3.395 kg / 1.865 kg -->
-      <origin xyz="0.0027468 0.0018366 -0.03525" rpy="0.0 -0.0 0.0"/>
+      <!-- CAD: x 0.0178508, mass 1.8654999, inertia ixx 0.0233589 ixy -0.0000147 ixz -0.0001721 iyy 0.0237556
+           iyz -0.0000158 izz 0.0189000. Measured on 2026-09-17 without the arm pipe:
+           - the motor outputs of a hover (21:37, script/estimate_cog_from_flight.py) put the centroid of the
+             robot 8.3 mm behind the model, which flew arm side up by 6-15 deg: the body centroid was moved
+             by 8.3 mm * 3.395 kg / 1.865 kg to x 0.0027468
+           - the robot weighs 3.9 kg against 3.395 kg of the model: the missing 0.505 kg is added to the body at
+             the centroid of the robot (so the centroid stays), and the inertia is scaled with the mass -->
+      <origin xyz="0.0042073 0.0016796 -0.0314033" rpy="0.0 -0.0 0.0"/>
       <!-- <mass value="1.3193189"/> -->
       <!-- <mass value="2.0421872">/ -->
-      <mass value="1.8654999"/>
+      <mass value="2.3707399"/>
       <!-- <inertia ixx="0.0150906" ixy="-0.0000095" ixz="-0.0001112" iyy="0.0153469" iyz="-0.0000102" izz="0.0122100"/> -->
       <inertia
-	  ixx="0.0233589"
-	  ixy="-0.0000147"
-	  ixz="-0.0001721"
-	  iyy="0.0237556"
-	  iyz="-0.0000158"
-	  izz="0.0189000"/>
+	  ixx="0.0296853"
+	  ixy="-0.0000187"
+	  ixz="-0.0002187"
+	  iyy="0.0301894"
+	  iyz="-0.0000201"
+	  izz="0.0240188"/>
     </inertial>
     <visual>
       <geometry>
