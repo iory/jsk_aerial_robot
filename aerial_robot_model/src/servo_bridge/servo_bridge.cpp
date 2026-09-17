@@ -136,6 +136,14 @@ ServoBridge::ServoBridge(ros::NodeHandle nh, ros::NodeHandle nhp): nh_(nh),nhp_(
         {
           if(servo_params.first.find("controller") != string::npos)
             {
+              /* a servo of a joint which is not in the robot model (e.g. a module taken off the robot) is not handled */
+              if(!urdf_model.getJoint(servo_params.second["name"]))
+                {
+                  ROS_WARN("servo bridge: joint %s of %s is not in the robot model, ignore this servo",
+                           string(servo_params.second["name"]).c_str(), servo_params.first.c_str());
+                  continue;
+                }
+
               /* get parameters from urdf file */
               double upper_limit = urdf_model.getJoint(servo_params.second["name"])->limits->upper;
               double lower_limit = urdf_model.getJoint(servo_params.second["name"])->limits->lower;
