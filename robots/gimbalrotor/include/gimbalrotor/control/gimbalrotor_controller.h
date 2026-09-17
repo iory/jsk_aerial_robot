@@ -48,6 +48,13 @@ private:
   bool gimbal_calc_in_fc_;
   bool underactuate_;
   double target_roll_ = 0.0, target_pitch_ = 0.0;
+  /* gimbal lag compensation: the thrusts are re-allocated on the measured gimbal angles, so that the fast
+     thrusts give the z force and the roll / pitch torque the gimbals do not give yet */
+  bool gimbal_lag_compensation_ = false;
+  double gimbal_lag_compensation_limit_ = 2.0;  // [N] per rotor
+  ros::Publisher thrust_correction_pub_;
+  void compensateGimbalLag(const Eigen::VectorXd& target_wrench_acc_cog, const Eigen::Matrix3d& inertia_inv,
+                           double mass_inv);
 
   void rosParamInit();
   bool update() override;

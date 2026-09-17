@@ -33,6 +33,7 @@ void GimbalrotorController::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
   torque_allocation_matrix_inv_pub_ =
       nh_.advertise<spinal::TorqueAllocationMatrixInv>("torque_allocation_matrix_inv", 1);
   gimbal_dof_pub_ = nh_.advertise<std_msgs::UInt8>("gimbal_dof", 1);
+  thrust_correction_pub_ = nh_.advertise<std_msgs::Float32MultiArray>("debug/thrust_correction", 1);
 }
 
 void GimbalrotorController::reset()
@@ -49,6 +50,8 @@ void GimbalrotorController::rosParamInit()
   getParam<bool>(control_nh, "gimbal_calc_in_fc", gimbal_calc_in_fc_, true);
   getParam<bool>(control_nh, "hovering_approximate", hovering_approximate_, false);
   getParam<bool>(control_nh, "underactuate", underactuate_, false);
+  getParam<bool>(control_nh, "gimbal_lag_compensation", gimbal_lag_compensation_, false);
+  getParam<double>(control_nh, "gimbal_lag_compensation_limit", gimbal_lag_compensation_limit_, 2.0);
 }
 
 bool GimbalrotorController::update()
@@ -252,6 +255,67 @@ void GimbalrotorController::controlCore()
     }
     last_col += rotor_coef_;
   }
+
+  if (gimbal_lag_compensation_ && gimbal_dof_ == 1 && !underactuate_)
+    compensateGimbalLag(target_wrench_acc_cog, inertia_inv, mass_inv);
+}
+
+void GimbalrotorController::compensateGimbalLag(const Eigen::VectorXd& target_wrench_acc_cog,
+                                                const Eigen::Matrix3d& inertia_inv, double mass_inv)
+{
+  /*
+   * The allocation above gives each rotor a thrust and a gimbal angle. The thrust follows its command in
+   * about 0.07 s, the gimbal servo in about 0.1 s and more, and the forward / side forces of the tilted
+   * rotors act on the roll / pitch through the height of the rotors above the centroid. Until a gimbal
+   * reaches its target, the rotors give another roll / pitch torque than allocated (2026-09-17: half of the
+   * pitch torque came 0.45 s after the command). With the gimbal angles as they are (joint_states), the
+   * thrusts are corrected by the least change that gives the allocated z force and roll / pitch torque.
+   */
+  const auto& joint_positions = gimbalrotor_robot_model_->getJointPositions();
+  const auto& joint_index = gimbalrotor_robot_model_->getJointIndexMap();
+  const std::vector<Eigen::Vector3d> rotors_origin_from_cog =
+      gimbalrotor_robot_model_->getRotorsOriginFromCog<Eigen::Vector3d>();
+  const std::vector<KDL::Rotation> arm_rots = gimbalrotor_robot_model_->getThrustCoordRot<KDL::Rotation>();
+  const auto& rotor_direction = gimbalrotor_robot_model_->getRotorDirection();
+  const double m_f_rate = gimbalrotor_robot_model_->getMFRate();
+
+  Eigen::MatrixXd wrench_map(6, motor_num_);
+  for (int i = 0; i < motor_num_; i++)
+  {
+    const auto it = joint_index.find("gimbal" + std::to_string(i + 1));
+    if (it == joint_index.end())
+      return;
+    const double angle = joint_positions(it->second);
+    tf::Quaternion q;
+    tf::quaternionKDLToTF(arm_rots.at(i), q);
+    Eigen::Matrix3d arm_rot;
+    tf::matrixTFToEigen(tf::Matrix3x3(q), arm_rot);
+    // the gimbal turns the rotor about x of its arm frame
+    const Eigen::Vector3d n = arm_rot * Eigen::Vector3d(0, -sin(angle), cos(angle));
+    wrench_map.block(0, i, 3, 1) = mass_inv * n;
+    wrench_map.block(3, i, 3, 1) =
+        inertia_inv * (rotors_origin_from_cog.at(i).cross(n) + rotor_direction.at(i + 1) * m_f_rate * n);
+  }
+
+  // z force, roll and pitch torque
+  Eigen::MatrixXd q3(3, motor_num_);
+  q3.row(0) = wrench_map.row(2);
+  q3.row(1) = wrench_map.row(3);
+  q3.row(2) = wrench_map.row(4);
+  Eigen::Vector3d target3(target_wrench_acc_cog(2), target_wrench_acc_cog(3), target_wrench_acc_cog(4));
+  Eigen::VectorXd thrust(motor_num_);
+  for (int i = 0; i < motor_num_; i++)
+    thrust(i) = target_full_thrust_.at(i);
+  Eigen::VectorXd correction = aerial_robot_model::pseudoinverse(q3) * (target3 - q3 * thrust);
+
+  std_msgs::Float32MultiArray msg;
+  for (int i = 0; i < motor_num_; i++)
+  {
+    const double c = std::max(-gimbal_lag_compensation_limit_, std::min(gimbal_lag_compensation_limit_, correction(i)));
+    target_full_thrust_.at(i) = std::max(0.0, thrust(i) + c);
+    msg.data.push_back(c);
+  }
+  thrust_correction_pub_.publish(msg);
 }
 
 void GimbalrotorController::sendCmd()
