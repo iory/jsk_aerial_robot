@@ -1,5 +1,5 @@
 {
-  "checkpoint": "logs/rsl_rl/gimbalrotor_hover/2026-09-18_10-39-24_v10_integral_from_v8/model_3998.pt",
+  "checkpoint": "logs/rsl_rl/gimbalrotor_hover/2026-09-18_14-30-19_v12_ground_from_v10/model_5497.pt",
   "obs_dim": 33,
   "action_dim": 8,
   "observation_terms": [
@@ -24,6 +24,5 @@
     "landing",
     "landed"
   ],
-  "trained": "mjlab Gimbalrotor-Hover v10 (v8 + position error integral observation, 4000 iterations, 2026-09-18), /mnt/workspace/gimbalrotor_mjlab logs/rsl_rl/gimbalrotor_hover/2026-09-18_10-39-24_v10_integral_from_v8/model_3998.pt",
-  "swap": "replace policy_torchscript.pt + .npz (+ this json) with another export of scripts/export_policy.py; 30- or 33-input networks both work without other changes"
+  "trained": "mjlab Gimbalrotor-Hover v12 (v10 + penalties on gimbal tilt and thrust bursts near the ground, 5500 iterations, 2026-09-18), /mnt/workspace/gimbalrotor_mjlab logs/rsl_rl/gimbalrotor_hover/2026-09-18_14-30-19_v12_ground_from_v10/model_5497.pt"
 }
