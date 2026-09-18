@@ -59,6 +59,14 @@ private:
   double vel_lpf_hz_;     // first-order low-pass on the velocity the policy sees (0 = none); a noisy estimator
                           // (gazebo's mocap mode) made the policy hover with a 0.3 m offset
   double integral_limit_; // [m s]
+  /* the navigator's target is ramped before the policy sees it, as the mission of the training gave it: the
+     policy loses the position on a yaw step of 45 deg and more (mjlab, 2026-09-18), the PID limits its yaw error
+     to 0.4 rad for the same reason */
+  double target_pos_rate_;   // [m/s], 0 = no ramp
+  double target_yaw_rate_;   // [rad/s], 0 = no ramp
+  tf::Vector3 target_pos_ramped_;
+  double target_yaw_ramped_;
+  bool target_ramp_init_;
   tf::Vector3 vel_filtered_;
   tf::Vector3 pos_error_integral_;
   bool vel_filter_init_;

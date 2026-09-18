@@ -15,6 +15,11 @@ GimbalrotorPolicyController::GimbalrotorPolicyController()
   , gimbal_limit_(0.785)
   , landed_height_(0.05)
   , vel_lpf_hz_(0.0)
+  , target_pos_rate_(0.5)
+  , target_yaw_rate_(0.8)
+  , target_pos_ramped_(0, 0, 0)
+  , target_yaw_ramped_(0)
+  , target_ramp_init_(false)
   , integral_limit_(1.0)
   , vel_filtered_(0, 0, 0)
   , pos_error_integral_(0, 0, 0)
@@ -42,6 +47,8 @@ void GimbalrotorPolicyController::initialize(ros::NodeHandle nh, ros::NodeHandle
   getParam<double>(policy_nh, "thrust_scale", thrust_scale_, 1.0);
   getParam<double>(policy_nh, "landed_height", landed_height_, 0.05);
   getParam<double>(policy_nh, "vel_lpf_hz", vel_lpf_hz_, 0.0);
+  getParam<double>(policy_nh, "target_pos_rate", target_pos_rate_, 0.5);
+  getParam<double>(policy_nh, "target_yaw_rate", target_yaw_rate_, 0.8);
   getParam<double>(policy_nh, "integral_limit", integral_limit_, 1.0);
   double gimbal_limit_default = gimbal_angle_limit_ > 0 ? gimbal_angle_limit_ : 0.785;
   getParam<double>(policy_nh, "gimbal_limit", gimbal_limit_, gimbal_limit_default);
@@ -69,6 +76,7 @@ void GimbalrotorPolicyController::reset()
   GimbalrotorController::reset();
   active_ = false;
   vel_filter_init_ = false;
+  target_ramp_init_ = false;
   pos_error_integral_.setValue(0, 0, 0);
   std::fill(last_applied_.begin(), last_applied_.end(), 0.0);
   for (int i = 0; i < motor_num_; i++)
@@ -143,7 +151,24 @@ std::vector<float> GimbalrotorPolicyController::observation()
     vel_filtered_ += alpha * (vel_ - vel_filtered_);
     vel = vel_filtered_;
   }
-  tf::Vector3 pos_err = yaw_rot.inverse() * (target_pos_ - pos_);
+  /* ramp the navigator's target toward its value at target_pos_rate / target_yaw_rate */
+  if (!target_ramp_init_)
+  {
+    target_pos_ramped_ = target_pos_;
+    target_yaw_ramped_ = target_rpy_.z();
+    target_ramp_init_ = true;
+  }
+  tf::Vector3 d_pos = target_pos_ - target_pos_ramped_;
+  const double max_step = target_pos_rate_ * dt;
+  if (target_pos_rate_ > 0 && d_pos.length() > max_step)
+    d_pos *= max_step / d_pos.length();
+  target_pos_ramped_ += d_pos;
+  double d_yaw = angles::shortest_angular_distance(target_yaw_ramped_, target_rpy_.z());
+  if (target_yaw_rate_ > 0)
+    d_yaw = std::max(-target_yaw_rate_ * dt, std::min(target_yaw_rate_ * dt, d_yaw));
+  target_yaw_ramped_ = angles::normalize_angle(target_yaw_ramped_ + d_yaw);
+
+  tf::Vector3 pos_err = yaw_rot.inverse() * (target_pos_ramped_ - pos_);
   tf::Vector3 vel_err = yaw_rot.inverse() * (target_vel_ - vel);
   obs.push_back(pos_err.x());
   obs.push_back(pos_err.y());
@@ -151,7 +176,7 @@ std::vector<float> GimbalrotorPolicyController::observation()
   obs.push_back(vel_err.x());
   obs.push_back(vel_err.y());
   obs.push_back(vel_err.z());
-  double yaw_err = angles::shortest_angular_distance(rpy_.z(), target_rpy_.z());
+  double yaw_err = angles::shortest_angular_distance(rpy_.z(), target_yaw_ramped_);
   obs.push_back(sin(yaw_err));
   obs.push_back(cos(yaw_err));
 
@@ -160,7 +185,7 @@ std::vector<float> GimbalrotorPolicyController::observation()
   const bool in_air = navi == aerial_robot_navigation::TAKEOFF_STATE || navi == aerial_robot_navigation::HOVER_STATE ||
                       navi == aerial_robot_navigation::LAND_STATE;
   if (in_air)
-    pos_error_integral_ += (target_pos_ - pos_) * dt;
+    pos_error_integral_ += (target_pos_ramped_ - pos_) * dt;
   else
     pos_error_integral_.setValue(0, 0, 0);
   for (int i = 0; i < 3; i++)
