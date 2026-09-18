@@ -16,7 +16,14 @@ controller:
     enable: false
     timeout: 0.02
     thrust_max: 30.0
+    # the policy's thrust [N] times this goes out: 1 on the real machine (gazebo: 0.5, its spinal doubles thrust)
+    thrust_scale: 1.0
     landed_height: 0.05
+    # first-order low-pass [Hz] on the velocity the policy sees, 0 for none (the real estimator is smooth; gazebo's
+    # mocap mode is not and made the policy hover 0.3 m off)
+    vel_lpf_hz: 0.0
+    # clamp [m s] of the position error integral in the observation (the network decides whether it uses it)
+    integral_limit: 1.0
 
   xy:
     # takeoff: no x / y control until 5 cm above the height at arming; on the ground the robot slid and

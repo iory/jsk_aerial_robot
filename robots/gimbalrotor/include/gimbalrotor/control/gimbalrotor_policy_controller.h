@@ -30,7 +30,8 @@ public:
                   boost::shared_ptr<aerial_robot_estimation::StateEstimator> estimator,
                   boost::shared_ptr<aerial_robot_navigation::BaseNavigator> navigator, double ctrl_loop_rate) override;
 
-  static const int OBS_DIM = 30;
+  static const int OBS_DIM = 33;           // policy_node.py drops the integral (indices 14-16) for a 30-input network
+  static const int OBS_DIM_INTEGRAL = 33;
   static const int ACTION_DIM = 8;
 
 protected:
@@ -51,6 +52,13 @@ private:
                           // commanded thrust: 0.5 there, 1 on the real machine)
   double gimbal_limit_;   // [rad]
   double landed_height_;  // [m] above the height at arming: LAND_STATE below it is the "landed" phase
+  double vel_lpf_hz_;     // first-order low-pass on the velocity the policy sees (0 = none); a noisy estimator
+                          // (gazebo's mocap mode) made the policy hover with a 0.3 m offset
+  double integral_limit_; // [m s]
+  tf::Vector3 vel_filtered_;
+  tf::Vector3 pos_error_integral_;
+  bool vel_filter_init_;
+  std::vector<float> observation();
   bool active_;
   std::vector<double> command_;       // the policy's last command (normalized, 8)
   double command_stamp_;
@@ -58,7 +66,6 @@ private:
 
   void commandCallback(const std_msgs::Float32MultiArray::ConstPtr& msg);
   void enableCallback(const std_msgs::Bool::ConstPtr& msg);
-  std::vector<float> observation() const;
   bool policyCommandUsable() const;
 };
 };  // namespace aerial_robot_control

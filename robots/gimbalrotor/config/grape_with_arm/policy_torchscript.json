@@ -1,0 +1,28 @@
+{
+  "checkpoint": "logs/rsl_rl/gimbalrotor_hover/2026-09-18_04-08-25_v8_gimbalpen_from_v5/model_2499.pt",
+  "obs_dim": 30,
+  "action_dim": 8,
+  "observation_terms": [
+    "projected_gravity",
+    "base_ang_vel",
+    "pose_error",
+    "gimbal_angles",
+    "last_command",
+    "mission_phase"
+  ],
+  "control_hz": 200.0,
+  "hover_thrust": 9.56475,
+  "thrust_max": 30.0,
+  "gimbal_limit": 0.785,
+  "thrust_from_action": "clip(hover_thrust * (1 + a[0:4]), 0, thrust_max)",
+  "gimbal_from_action": "clip(gimbal_limit * a[4:8], -gimbal_limit, gimbal_limit)",
+  "pose_error_frame": "heading (yaw) frame of the current attitude; target - current",
+  "mission_phase_one_hot": [
+    "ground_before_takeoff",
+    "flight",
+    "landing",
+    "landed"
+  ],
+  "trained": "mjlab Gimbalrotor-Hover v8 (2500 iterations, 2026-09-18), /mnt/workspace/gimbalrotor_mjlab logs/rsl_rl/gimbalrotor_hover/2026-09-18_04-08-25_v8_gimbalpen_from_v5/model_2499.pt",
+  "swap": "replace policy_torchscript.pt + .npz (+ this json) with another export of scripts/export_policy.py; a 33-input network (position error integral) needs no other change"
+}

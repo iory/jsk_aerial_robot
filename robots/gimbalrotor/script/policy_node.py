@@ -66,22 +66,28 @@ class TorchModule(object):
 
 
 class PolicyNode(object):
+    INTEGRAL_SLICE = slice(14, 17)   # after gravity 3, rates 3, pose error 8
+
     def __init__(self):
         policy_file = rospy.get_param("~policy_file")
         backend = rospy.get_param("~backend", "auto")   # auto | numpy | torch
         self.threads = int(rospy.get_param("~torch_threads", 2))
-        self.obs_dim = int(rospy.get_param("~obs_dim", 30))
+        self.obs_dim = int(rospy.get_param("~obs_dim", 0))   # 0: what the network takes
         self.action_dim = int(rospy.get_param("~action_dim", 8))
         npz = os.path.splitext(policy_file)[0] + ".npz"
         if backend == "numpy" or (backend == "auto" and os.path.exists(npz)):
             self.model = NumpyMlp(npz)
             backend = "numpy"
-            if self.model.obs_dim != self.obs_dim:
+            if self.obs_dim == 0:
+                self.obs_dim = self.model.obs_dim
+            elif self.model.obs_dim != self.obs_dim:
                 raise RuntimeError("%s takes %d observations, the node is set to %d"
                                    % (npz, self.model.obs_dim, self.obs_dim))
         else:
             self.model = TorchModule(policy_file, self.threads)
             backend = "torch"
+            if self.obs_dim == 0:
+                self.obs_dim = 30
         self.lock = threading.Lock()
         self.count = 0
         self.last_latency = 0.0
@@ -96,6 +102,9 @@ class PolicyNode(object):
     def callback(self, msg):
         t0 = rospy.Time.now()
         obs = np.asarray(msg.data, dtype=np.float32)
+        if obs.shape[0] == self.obs_dim + 3:
+            # the controller always adds the position error integral (indices 14-16); this network predates it
+            obs = np.delete(obs, self.INTEGRAL_SLICE)
         if obs.shape[0] != self.obs_dim:
             rospy.logwarn_throttle(1.0, "policy_node: observation has %d values, expected %d",
                                    obs.shape[0], self.obs_dim)

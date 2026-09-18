@@ -12,6 +12,11 @@ GimbalrotorPolicyController::GimbalrotorPolicyController()
   , thrust_scale_(1.0)
   , gimbal_limit_(0.785)
   , landed_height_(0.05)
+  , vel_lpf_hz_(0.0)
+  , integral_limit_(1.0)
+  , vel_filtered_(0, 0, 0)
+  , pos_error_integral_(0, 0, 0)
+  , vel_filter_init_(false)
   , active_(false)
   , command_(ACTION_DIM, 0.0)
   , command_stamp_(-1)
@@ -33,13 +38,16 @@ void GimbalrotorPolicyController::initialize(ros::NodeHandle nh, ros::NodeHandle
   getParam<double>(policy_nh, "thrust_max", thrust_max_, 30.0);
   getParam<double>(policy_nh, "thrust_scale", thrust_scale_, 1.0);
   getParam<double>(policy_nh, "landed_height", landed_height_, 0.05);
+  getParam<double>(policy_nh, "vel_lpf_hz", vel_lpf_hz_, 0.0);
+  getParam<double>(policy_nh, "integral_limit", integral_limit_, 1.0);
   double gimbal_limit_default = gimbal_angle_limit_ > 0 ? gimbal_angle_limit_ : 0.785;
   getParam<double>(policy_nh, "gimbal_limit", gimbal_limit_, gimbal_limit_default);
   // the robot model has no mass until its first kinematics update: the hover thrust is taken in controlCore
   hover_thrust_ = 0.0;
   ROS_INFO_STREAM("gimbalrotor policy controller: thrust max " << thrust_max_ << " N, thrust scale " << thrust_scale_
                                                                   << " N, gimbal limit " << gimbal_limit_
-                                                                  << " rad, timeout " << timeout_ << " s, "
+                                                                  << " rad, timeout " << timeout_ << " s, velocity low-pass "
+                                                                  << vel_lpf_hz_ << " Hz, "
                                                                   << (enabled_ ? "enabled" : "disabled (PID)"));
 
   observation_pub_ = nh_.advertise<std_msgs::Float32MultiArray>("policy/observation", 1);
@@ -57,6 +65,8 @@ void GimbalrotorPolicyController::reset()
 {
   GimbalrotorController::reset();
   active_ = false;
+  vel_filter_init_ = false;
+  pos_error_integral_.setValue(0, 0, 0);
   std::fill(last_applied_.begin(), last_applied_.end(), 0.0);
   for (int i = 0; i < motor_num_; i++)
     last_applied_.at(i) = -1.0;
@@ -95,13 +105,13 @@ bool GimbalrotorPolicyController::policyCommandUsable() const
   return ros::Time::now().toSec() - command_stamp_ <= timeout_;
 }
 
-std::vector<float> GimbalrotorPolicyController::observation() const
+std::vector<float> GimbalrotorPolicyController::observation()
 {
   /* the layout of gimbalrotor_mjlab/env_cfg.py (actor group):
      projected gravity (3), body rates (3), position error (3) and velocity error (3) in the heading frame,
      sin / cos of the yaw error (2), gimbal angles (4), the last command (8), the flight phase one-hot (4) */
   std::vector<float> obs;
-  obs.reserve(OBS_DIM);
+  obs.reserve(OBS_DIM_INTEGRAL);
 
   tf::Matrix3x3 rot;
   rot.setRPY(rpy_.x(), rpy_.y(), rpy_.z());
@@ -115,8 +125,21 @@ std::vector<float> GimbalrotorPolicyController::observation() const
 
   tf::Matrix3x3 yaw_rot;
   yaw_rot.setRPY(0, 0, rpy_.z());
+  const double dt = ctrl_loop_du_;
+  tf::Vector3 vel = vel_;
+  if (vel_lpf_hz_ > 0)
+  {
+    if (!vel_filter_init_)
+    {
+      vel_filtered_ = vel_;
+      vel_filter_init_ = true;
+    }
+    const double alpha = 1.0 - exp(-2.0 * M_PI * vel_lpf_hz_ * dt);
+    vel_filtered_ += alpha * (vel_ - vel_filtered_);
+    vel = vel_filtered_;
+  }
   tf::Vector3 pos_err = yaw_rot.inverse() * (target_pos_ - pos_);
-  tf::Vector3 vel_err = yaw_rot.inverse() * (target_vel_ - vel_);
+  tf::Vector3 vel_err = yaw_rot.inverse() * (target_vel_ - vel);
   obs.push_back(pos_err.x());
   obs.push_back(pos_err.y());
   obs.push_back(pos_err.z());
@@ -126,6 +149,22 @@ std::vector<float> GimbalrotorPolicyController::observation() const
   double yaw_err = angles::shortest_angular_distance(rpy_.z(), target_rpy_.z());
   obs.push_back(sin(yaw_err));
   obs.push_back(cos(yaw_err));
+
+  /* the integral of the position error (world frame, in the air only), as the training's mission gave it */
+  const uint8_t navi = navigator_->getNaviState();
+  const bool in_air = navi == aerial_robot_navigation::TAKEOFF_STATE || navi == aerial_robot_navigation::HOVER_STATE ||
+                      navi == aerial_robot_navigation::LAND_STATE;
+  if (in_air)
+    pos_error_integral_ += (target_pos_ - pos_) * dt;
+  else
+    pos_error_integral_.setValue(0, 0, 0);
+  for (int i = 0; i < 3; i++)
+    pos_error_integral_[i] = std::max(-integral_limit_, std::min(integral_limit_, (double)pos_error_integral_[i]));
+  /* always published (33 values); policy_node.py drops these three for a network that takes 30 */
+  tf::Vector3 integral_h = yaw_rot.inverse() * pos_error_integral_;
+  obs.push_back(integral_h.x());
+  obs.push_back(integral_h.y());
+  obs.push_back(integral_h.z());
 
   const auto& joint_positions = gimbalrotor_robot_model_->getJointPositions();
   const auto& joint_index = gimbalrotor_robot_model_->getJointIndexMap();
