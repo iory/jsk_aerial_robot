@@ -46,6 +46,10 @@
        only acts while policy/enable is true (policy_enable at start) and its commands are fresh; publish
        `rostopic pub /gimbalrotor/policy/enable std_msgs/Bool false` to hand the flight back to the PID -->
   <arg name="policy" default="false" />
+  <!-- policy_torchscript.pt = v12 (the takeoff / hover policy flown in gazebo, 2026-09-18); policy_torchscript_v17.pt = v17
+       (2026-09-19: trained on top with recoveries from +-15 deg, per-rotor thrust gains, gimbal zero-point errors, battery
+       sag and a wind-like force: calmer hover and better on a mismatched airframe in mjlab, 0.3 deg more tilt at liftoff).
+       policy_file:=$(find gimbalrotor)/config/grape_with_arm/policy_torchscript_v17.pt selects it -->
   <arg name="policy_file" default="$(arg config_dir)/$(arg airframe)/policy_torchscript.pt" />
   <arg name="policy_enable" default="false" />
   <arg name="launch_arm_controller" default="$(eval arg('airframe') == 'grape_with_arm' and arg('arm_pipe'))" />
