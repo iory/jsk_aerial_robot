@@ -6,7 +6,9 @@ namespace aerial_robot_control
 GimbalrotorPolicyController::GimbalrotorPolicyController()
   : GimbalrotorController()
   , enabled_(false)
-  , timeout_(0.02)
+  , timeout_(0.1)
+  , fallback_time_(0.3)
+  , latched_off_(false)
   , hover_thrust_(0)
   , thrust_max_(30.0)
   , thrust_scale_(1.0)
@@ -34,7 +36,8 @@ void GimbalrotorPolicyController::initialize(ros::NodeHandle nh, ros::NodeHandle
 
   ros::NodeHandle policy_nh(nh_, "controller/policy");
   getParam<bool>(policy_nh, "enable", enabled_, false);
-  getParam<double>(policy_nh, "timeout", timeout_, 0.02);
+  getParam<double>(policy_nh, "timeout", timeout_, 0.1);
+  getParam<double>(policy_nh, "fallback_time", fallback_time_, 0.3);
   getParam<double>(policy_nh, "thrust_max", thrust_max_, 30.0);
   getParam<double>(policy_nh, "thrust_scale", thrust_scale_, 1.0);
   getParam<double>(policy_nh, "landed_height", landed_height_, 0.05);
@@ -93,16 +96,18 @@ void GimbalrotorPolicyController::commandCallback(const std_msgs::Float32MultiAr
 
 void GimbalrotorPolicyController::enableCallback(const std_msgs::Bool::ConstPtr& msg)
 {
-  if (msg->data != enabled_)
+  if (msg->data != enabled_ || (msg->data && latched_off_))
     ROS_WARN_STREAM("policy " << (msg->data ? "ENABLED" : "DISABLED: PID in control"));
   enabled_ = msg->data;
+  if (msg->data)
+    latched_off_ = false;  // an explicit enable clears the fallback latch
 }
 
 bool GimbalrotorPolicyController::policyCommandUsable() const
 {
-  if (!enabled_ || command_stamp_ < 0)
+  if (!enabled_ || latched_off_ || command_stamp_ < 0)
     return false;
-  return ros::Time::now().toSec() - command_stamp_ <= timeout_;
+  return ros::Time::now().toSec() - command_stamp_ <= fallback_time_;
 }
 
 std::vector<float> GimbalrotorPolicyController::observation()
@@ -204,7 +209,17 @@ void GimbalrotorPolicyController::controlCore()
       ROS_INFO_STREAM("gimbalrotor policy controller: hover thrust " << hover_thrust_ << " N per rotor (mass " << mass << " kg)");
     }
   }
+  if (enabled_ && !latched_off_ && command_stamp_ >= 0 && active_ &&
+      ros::Time::now().toSec() - command_stamp_ > fallback_time_)
+  {
+    latched_off_ = true;
+    ROS_ERROR("policy command %.0f ms old: PID in control until policy/enable is published true again",
+              (ros::Time::now().toSec() - command_stamp_) * 1000);
+  }
   const bool use_policy = policyCommandUsable() && hover_thrust_ > 0;
+  if (use_policy && ros::Time::now().toSec() - command_stamp_ > timeout_)
+    ROS_WARN_THROTTLE(1.0, "policy command %.0f ms old: holding the last one",
+                      (ros::Time::now().toSec() - command_stamp_) * 1000);
   std::vector<double> err_i(pid_controllers_.size());
   for (size_t i = 0; i < pid_controllers_.size(); i++)
     err_i.at(i) = pid_controllers_.at(i).getErrI();
@@ -234,8 +249,6 @@ void GimbalrotorPolicyController::controlCore()
   }
   else
   {
-    if (enabled_ && active_)
-      ROS_WARN_THROTTLE(1.0, "policy command stale (> %.0f ms): PID in control", timeout_ * 1000);
     for (int i = 0; i < motor_num_; i++)
     {
       last_applied_.at(i) = std::max(-1.0, std::min(thrust_max_ / hover_thrust_ - 1.0,

@@ -1,11 +1,12 @@
 {
-  "checkpoint": "logs/rsl_rl/gimbalrotor_hover/2026-09-18_04-08-25_v8_gimbalpen_from_v5/model_2499.pt",
-  "obs_dim": 30,
+  "checkpoint": "logs/rsl_rl/gimbalrotor_hover/2026-09-18_10-39-24_v10_integral_from_v8/model_3998.pt",
+  "obs_dim": 33,
   "action_dim": 8,
   "observation_terms": [
     "projected_gravity",
     "base_ang_vel",
     "pose_error",
+    "pos_error_integral",
     "gimbal_angles",
     "last_command",
     "mission_phase"
@@ -23,6 +24,6 @@
     "landing",
     "landed"
   ],
-  "trained": "mjlab Gimbalrotor-Hover v8 (2500 iterations, 2026-09-18), /mnt/workspace/gimbalrotor_mjlab logs/rsl_rl/gimbalrotor_hover/2026-09-18_04-08-25_v8_gimbalpen_from_v5/model_2499.pt",
-  "swap": "replace policy_torchscript.pt + .npz (+ this json) with another export of scripts/export_policy.py; a 33-input network (position error integral) needs no other change"
+  "trained": "mjlab Gimbalrotor-Hover v10 (v8 + position error integral observation, 4000 iterations, 2026-09-18), /mnt/workspace/gimbalrotor_mjlab logs/rsl_rl/gimbalrotor_hover/2026-09-18_10-39-24_v10_integral_from_v8/model_3998.pt",
+  "swap": "replace policy_torchscript.pt + .npz (+ this json) with another export of scripts/export_policy.py; 30- or 33-input networks both work without other changes"
 }

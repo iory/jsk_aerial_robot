@@ -45,7 +45,11 @@ private:
   ros::Subscriber enable_sub_;
 
   bool enabled_;
-  double timeout_;
+  double timeout_;        // [s] a command older than this is held as it is (the policy was trained with dead times
+                          // up to 0.08 s) ...
+  double fallback_time_;  // [s] ... and older than this hands the flight to the PID, latched until policy/enable
+                          // is published true again: alternating PID / policy at 200 Hz flipped the robot in gazebo
+  bool latched_off_;
   double hover_thrust_;   // [N] per rotor, mass * g / 4 of the robot model
   double thrust_max_;     // [N]
   double thrust_scale_;   // the policy's thrust [N] times this goes out (gazebo's spinal makes about twice the

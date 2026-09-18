@@ -10,11 +10,14 @@ controller:
   gimbal_angle_limit: 0.785
 
   # the learned controller (bringup.launch policy:=true, aerial_robot_control/gimbalrotor_policy_controller):
-  # the policy's command replaces the PID's thrusts and gimbal angles only while policy/enable is true and
-  # the last command of policy_node.py is at most timeout [s] old; the PID flies otherwise
+  # the policy's command replaces the PID's thrusts and gimbal angles while policy/enable is true. A command of
+  # policy_node.py older than timeout [s] is held (the policy was trained with dead times up to 0.08 s); older
+  # than fallback_time [s] the PID takes over and keeps the flight until policy/enable is published true again
+  # (alternating PID / policy at 200 Hz flipped the robot in gazebo)
   policy:
     enable: false
-    timeout: 0.02
+    timeout: 0.1
+    fallback_time: 0.3
     thrust_max: 30.0
     # the policy's thrust [N] times this goes out: 1 on the real machine (gazebo: 0.5, its spinal doubles thrust)
     thrust_scale: 1.0
