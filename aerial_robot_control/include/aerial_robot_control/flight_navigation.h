@@ -375,9 +375,13 @@ namespace aerial_robot_navigation
       land_height_ = 0;
     }
 
+    /* a robot can refuse a takeoff (the gimbalrotor wants its gimbals zeroed and checked first) */
+    virtual bool takeoffAllowed() { return true; }
+
     void startTakeoff()
     {
       if(getNaviState() == TAKEOFF_STATE) return;
+      if(!takeoffAllowed()) return;
 
       /* check xy position error in initial state */
       double pos_x_error = getTargetPos().x() - estimator_->getPos(Frame::COG, estimate_mode_).x();

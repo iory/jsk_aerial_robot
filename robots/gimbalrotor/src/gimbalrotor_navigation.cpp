@@ -20,6 +20,9 @@ void GimbalrotorNavigator::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
   BaseNavigator::initialize(nh, nhp, robot_model, estimator, loop_du);
 
   target_baselink_rpy_pub_ = nh_.advertise<spinal::DesireCoord>("desire_coordinate", 1);  // to spinal
+  gimbal_zero_pub_ = nh_.advertise<sensor_msgs::JointState>("gimbals_ctrl", 1);
+  gimbals_zero_sub_ = nh_.subscribe("gimbals_zero", 1, &GimbalrotorNavigator::gimbalsZeroCallback, this);
+  gimbals_zeroed_ = false;
   final_target_baselink_rot_sub_ =
       nh_.subscribe("final_target_baselink_rot", 1, &GimbalrotorNavigator::targetBaselinkRotCallback, this);
   final_target_baselink_rpy_sub_ =
@@ -33,8 +36,53 @@ void GimbalrotorNavigator::update()
   baselinkRotationProcess();
 }
 
+void GimbalrotorNavigator::gimbalsZeroCallback(const std_msgs::EmptyConstPtr& msg)
+{
+  sensor_msgs::JointState cmd;
+  cmd.header.stamp = ros::Time::now();
+  for (int i = 0; i < 4; i++)
+  {
+    cmd.name.push_back("gimbal" + std::to_string(i + 1));
+    cmd.position.push_back(0.0);
+  }
+  gimbal_zero_pub_.publish(cmd);
+  gimbals_zeroed_ = true;
+  ROS_WARN("gimbals commanded to zero: check them, then takeoff");
+}
+
+bool GimbalrotorNavigator::takeoffAllowed()
+{
+  if (!takeoff_gimbal_check_)
+    return true;
+  if (!gimbals_zeroed_)
+  {
+    ROS_ERROR("takeoff refused: the gimbals have not been zeroed since arming. Publish gimbals_zero (std_msgs/Empty), "
+              "look at the gimbals, then takeoff");
+    return false;
+  }
+  const auto& joint_positions = robot_model_->getJointPositions();
+  const auto& joint_index = robot_model_->getJointIndexMap();
+  std::stringstream angles;
+  bool ok = true;
+  for (int i = 0; i < 4; i++)
+  {
+    const auto it = joint_index.find("gimbal" + std::to_string(i + 1));
+    if (it == joint_index.end())
+      continue;
+    const double angle = joint_positions(it->second);
+    angles << (i ? ", " : "") << angle * 180.0 / M_PI;
+    if (fabs(angle) > takeoff_gimbal_tolerance_)
+      ok = false;
+  }
+  if (!ok)
+    ROS_ERROR_STREAM("takeoff refused: gimbal angles [" << angles.str() << "] deg are not within "
+                     << takeoff_gimbal_tolerance_ * 180.0 / M_PI << " deg of zero. Publish gimbals_zero and check them");
+  return ok;
+}
+
 void GimbalrotorNavigator::reset()
 {
+  gimbals_zeroed_ = false;
   BaseNavigator::reset();
 
   // a roll / pitch target given through uav/nav (e.g. script/excite_attitude.py) must not stay for the next flight
@@ -120,6 +168,8 @@ void GimbalrotorNavigator::rosParamInit()
 
   ros::NodeHandle navi_nh(nh_, "navigation");
 
+  getParam<bool>(navi_nh, "takeoff_gimbal_check", takeoff_gimbal_check_, true);
+  getParam<double>(navi_nh, "takeoff_gimbal_tolerance", takeoff_gimbal_tolerance_, 5.0 * M_PI / 180.0);
   getParam<double>(navi_nh, "baselink_rot_change_thresh", baselink_rot_change_thresh_,
                    0.02);  // the threshold to change the baselink rotation
   getParam<double>(navi_nh, "baselink_rot_pub_interval", baselink_rot_pub_interval_,

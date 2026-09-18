@@ -6,6 +6,8 @@
 #include <geometry_msgs/Vector3Stamped.h>
 #include <geometry_msgs/QuaternionStamped.h>
 #include <spinal/DesireCoord.h>
+#include <sensor_msgs/JointState.h>
+#include <std_msgs/Empty.h>
 
 namespace aerial_robot_navigation
 {
@@ -23,7 +25,19 @@ public:
 
   void update() override;
 
+  /* Takeoff interlock: the gimbals have to be commanded to zero through the topic gimbals_zero (a human
+     step, so that someone looks at them) and measured within takeoff_gimbal_tolerance of zero, since
+     arming; a takeoff with the gimbals left tilted by the previous flight tipped the robot over at liftoff
+     (2026-09-18). */
+  bool takeoffAllowed() override;
+
 private:
+  ros::Publisher gimbal_zero_pub_;
+  ros::Subscriber gimbals_zero_sub_;
+  void gimbalsZeroCallback(const std_msgs::EmptyConstPtr& msg);
+  bool gimbals_zeroed_;
+  double takeoff_gimbal_tolerance_;  // [rad]
+  bool takeoff_gimbal_check_;
   ros::Publisher target_baselink_rpy_pub_;
   ros::Subscriber final_target_baselink_rot_sub_, final_target_baselink_rpy_sub_;
 
