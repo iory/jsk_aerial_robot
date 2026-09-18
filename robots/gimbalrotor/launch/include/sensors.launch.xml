@@ -78,6 +78,10 @@
           <include file="$(find fast_lio)/launch/mapping_mid360.launch" >
             <arg name="rviz" value="false" />
           </include>
+          <!-- points on the robot itself: rotor arms at 0.22-0.3 m and the legs 0.32 m below the lidar. In the
+               flight of 2026-09-17 22:34 14 % of the points were 0.2-0.5 m from the lidar (the walls are beyond
+               1 m); they move with the robot and pull the scan match toward "no motion" -->
+          <param name="preprocess/blind" value="0.5" />
 
           <!-- the odometry of fast_lio starts at z = 0 where bringup starts, not on the ground: take off
                takeoff_height above the height at arming (see flight_navigation.h) -->
