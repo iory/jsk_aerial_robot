@@ -30,6 +30,27 @@ navigation:
   gps_waypoint_threshold: 3.0
   gps_waypoint_check_du: 1.0
 
+  # flight supervisor (gimbalrotor_navigation.cpp supervise()): the automatic reactions to a flight that goes
+  # wrong, from the mildest up. All heights are above the height at the takeoff command, angles in rad.
+  #   takeoff abort: in TAKEOFF_STATE, tilted more than takeoff_abort_tilt below takeoff_abort_height -> motors off
+  #                  (over the legs; a flight of 2026-09-18 tipped over at 4-7 cm with the thrust kept on)
+  #   force landing: tilt above force_landing_tilt for force_landing_tilt_time, xy error, z error (hover), speed,
+  #                  height or geofence -> spinal force landing (level attitude, slow thrust ramp-down)
+  #   halt:          tilt above halt_tilt, or halt_fall_height below the takeoff spot and falling -> motors off
+  supervisor:
+    enable: true
+    takeoff_abort_height: 0.2
+    takeoff_abort_tilt: 0.21      # 12 deg
+    force_landing_tilt: 0.52      # 30 deg
+    force_landing_tilt_time: 0.3
+    max_pos_error_xy: 1.0
+    max_pos_error_z: 0.7
+    max_speed: 2.0
+    max_height: 2.0
+    halt_tilt: 1.05               # 60 deg
+    halt_fall_height: 0.1
+    # geofence: [x_min, x_max, y_min, y_max]  # world frame [m], leave out for none
+
   # desire tilt
   baselink_rot_pub_interval: 0.2
   baselink_rot_change_thresh: 0.04 # 0.2 hz -> 0.04; 0.01 hz-> 0.02

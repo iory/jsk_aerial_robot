@@ -9,6 +9,11 @@ GimbalrotorPolicyController::GimbalrotorPolicyController()
   , timeout_(0.1)
   , fallback_time_(0.3)
   , latched_off_(false)
+  , supervisor_enable_(true)
+  , attitude_over_since_(-1)
+  , pos_over_since_(-1)
+  , speed_over_since_(-1)
+  , saturated_since_(-1)
   , hover_thrust_(0)
   , thrust_max_(30.0)
   , thrust_scale_(1.0)
@@ -43,6 +48,13 @@ void GimbalrotorPolicyController::initialize(ros::NodeHandle nh, ros::NodeHandle
   getParam<bool>(policy_nh, "enable", enabled_, false);
   getParam<double>(policy_nh, "timeout", timeout_, 0.1);
   getParam<double>(policy_nh, "fallback_time", fallback_time_, 0.3);
+  ros::NodeHandle sup_nh(policy_nh, "supervisor");
+  getParam<bool>(sup_nh, "enable", supervisor_enable_, true);
+  getParam<double>(sup_nh, "max_attitude_error", max_attitude_error_, 15.0 * M_PI / 180.0);
+  getParam<double>(sup_nh, "max_pos_error", max_pos_error_, 0.8);
+  getParam<double>(sup_nh, "max_speed", max_speed_, 1.5);
+  getParam<double>(sup_nh, "trip_time", trip_time_, 0.2);
+  fallback_pub_ = nh_.advertise<std_msgs::String>("policy/fallback", 1, true);
   getParam<double>(policy_nh, "thrust_max", thrust_max_, 30.0);
   getParam<double>(policy_nh, "thrust_scale", thrust_scale_, 1.0);
   getParam<double>(policy_nh, "landed_height", landed_height_, 0.05);
@@ -77,6 +89,7 @@ void GimbalrotorPolicyController::reset()
   active_ = false;
   vel_filter_init_ = false;
   target_ramp_init_ = false;
+  attitude_over_since_ = pos_over_since_ = speed_over_since_ = saturated_since_ = -1;
   pos_error_integral_.setValue(0, 0, 0);
   std::fill(last_applied_.begin(), last_applied_.end(), 0.0);
   for (int i = 0; i < motor_num_; i++)
@@ -221,6 +234,58 @@ std::vector<float> GimbalrotorPolicyController::observation()
   return obs;
 }
 
+bool GimbalrotorPolicyController::supervisorTrips(std::string& reason)
+{
+  const double now = ros::Time::now().toSec();
+  char buf[120];
+  if (navigator_->getForceLandingFlag())
+  {
+    reason = "force landing";
+    return true;
+  }
+  auto over = [&](bool cond, double& since) {
+    if (!cond)
+    {
+      since = -1;
+      return false;
+    }
+    if (since < 0)
+      since = now;
+    return now - since > trip_time_;
+  };
+  const double att_err = std::max(fabs(rpy_.x() - target_rpy_.x()), fabs(rpy_.y() - target_rpy_.y()));
+  if (over(att_err > max_attitude_error_, attitude_over_since_))
+  {
+    snprintf(buf, sizeof(buf), "attitude error %.0f deg > %.0f deg", att_err * 180 / M_PI, max_attitude_error_ * 180 / M_PI);
+    reason = buf;
+    return true;
+  }
+  const double pos_err = (target_pos_ramped_ - pos_).length();
+  if (over(pos_err > max_pos_error_, pos_over_since_))
+  {
+    snprintf(buf, sizeof(buf), "position error %.2f m > %.2f m", pos_err, max_pos_error_);
+    reason = buf;
+    return true;
+  }
+  const double speed = vel_.length();
+  if (over(speed > max_speed_, speed_over_since_))
+  {
+    snprintf(buf, sizeof(buf), "speed %.1f m/s > %.1f m/s", speed, max_speed_);
+    reason = buf;
+    return true;
+  }
+  bool saturated = false;
+  for (int i = 0; i < motor_num_; i++)
+    if (fabs(command_.at(motor_num_ + i)) >= 0.98)
+      saturated = true;
+  if (over(saturated, saturated_since_))
+  {
+    reason = "a gimbal command at its limit";
+    return true;
+  }
+  return false;
+}
+
 void GimbalrotorPolicyController::controlCore()
 {
   /* the PID runs every step (it is the fallback); while the policy flies, its integrators are held so
@@ -241,7 +306,7 @@ void GimbalrotorPolicyController::controlCore()
     ROS_ERROR("policy command %.0f ms old: PID in control until policy/enable is published true again",
               (ros::Time::now().toSec() - command_stamp_) * 1000);
   }
-  const bool use_policy = policyCommandUsable() && hover_thrust_ > 0;
+  bool use_policy = policyCommandUsable() && hover_thrust_ > 0;
   if (use_policy && ros::Time::now().toSec() - command_stamp_ > timeout_)
     ROS_WARN_THROTTLE(1.0, "policy command %.0f ms old: holding the last one",
                       (ros::Time::now().toSec() - command_stamp_) * 1000);
@@ -250,6 +315,17 @@ void GimbalrotorPolicyController::controlCore()
     err_i.at(i) = pid_controllers_.at(i).getErrI();
 
   GimbalrotorController::controlCore();
+
+  std::string reason;
+  if (use_policy && supervisor_enable_ && supervisorTrips(reason))
+  {
+    latched_off_ = true;
+    use_policy = false;
+    ROS_ERROR_STREAM("policy supervisor: " << reason << ": PID in control until policy/enable is published true again");
+    std_msgs::String msg;
+    msg.data = reason;
+    fallback_pub_.publish(msg);
+  }
 
   if (use_policy)
   {

@@ -26,6 +26,19 @@ controller:
     vel_lpf_hz: 0.0
     # clamp [m s] of the position error integral in the observation (the network decides whether it uses it)
     integral_limit: 1.0
+    # the navigator's target is ramped before the policy sees it (the policies lose the position on a yaw step
+    # of 45 deg and more)
+    target_pos_rate: 0.5
+    target_yaw_rate: 0.8
+    # supervisor of the policy: while the policy flies, each of these for longer than trip_time [s] hands the
+    # flight to the PID (latched until policy/enable is published true again; policy/fallback tells why).
+    # In mjlab the policy stays under 10 deg of tilt in hover and under 25 deg during the 0.8 Nm yaw disturbance
+    supervisor:
+      enable: true
+      max_attitude_error: 0.35  # [rad] 20 deg from the navigator's roll / pitch target
+      max_pos_error: 0.8        # [m] from the ramped target
+      max_speed: 1.5            # [m/s]
+      trip_time: 0.2
 
   xy:
     p_gain: 3.0

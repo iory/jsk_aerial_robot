@@ -4,6 +4,7 @@
 #include <gimbalrotor/control/gimbalrotor_controller.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Float32MultiArray.h>
+#include <std_msgs/String.h>
 
 namespace aerial_robot_control
 {
@@ -50,6 +51,18 @@ private:
   double fallback_time_;  // [s] ... and older than this hands the flight to the PID, latched until policy/enable
                           // is published true again: alternating PID / policy at 200 Hz flipped the robot in gazebo
   bool latched_off_;
+  /* supervisor of the policy (controller/policy/supervisor): while the policy flies, an attitude error above
+     max_attitude_error, a distance above max_pos_error from the (ramped) target, a speed above max_speed, or a
+     gimbal command at its limit, each for longer than trip_time, or a force landing, hands the flight to the
+     PID (latched, as the stale-command fallback). The first tier of the flight supervisor of the navigator. */
+  bool supervisor_enable_;
+  double max_attitude_error_;   // [rad]
+  double max_pos_error_;        // [m]
+  double max_speed_;            // [m/s]
+  double trip_time_;            // [s]
+  double attitude_over_since_, pos_over_since_, speed_over_since_, saturated_since_;
+  ros::Publisher fallback_pub_;  // std_msgs/String: why the PID took over
+  bool supervisorTrips(std::string& reason);
   double hover_thrust_;   // [N] per rotor, mass * g / 4 of the robot model
   double thrust_max_;     // [N]
   double thrust_scale_;   // the policy's thrust [N] times this goes out (gazebo's spinal makes about twice the
