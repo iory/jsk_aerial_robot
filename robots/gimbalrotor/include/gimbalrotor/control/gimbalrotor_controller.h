@@ -23,7 +23,7 @@ public:
                   boost::shared_ptr<aerial_robot_estimation::StateEstimator> estimator,
                   boost::shared_ptr<aerial_robot_navigation::BaseNavigator> navigator, double ctrl_loop_rate) override;
 
-private:
+protected:  // GimbalrotorPolicyController replaces the allocated thrusts and gimbal angles by a learned policy's
   ros::Publisher flight_cmd_pub_;
   ros::Publisher gimbal_control_pub_;
   ros::Publisher gimbal_state_pub_;

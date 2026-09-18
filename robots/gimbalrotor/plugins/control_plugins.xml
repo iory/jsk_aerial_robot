@@ -3,3 +3,8 @@
     <description>plugin for gimbalrotor control </description>
   </class>
 </library>
+<library path="lib/libgimbalrotor_policy_controller">
+  <class name="aerial_robot_control/gimbalrotor_policy_controller" type="aerial_robot_control::GimbalrotorPolicyController" base_class_type="aerial_robot_control::ControlBase">
+    <description>the gimbalrotor PID with a learned policy (policy_node.py) in front of the actuators, PID fallback</description>
+  </class>
+</library>

@@ -41,6 +41,13 @@
   <!-- true / false: re-allocate the thrusts on the measured gimbal angles (controller/gimbal_lag_compensation);
        empty keeps the control config -->
   <arg name="gimbal_lag_compensation" default="" />
+  <!-- policy:=true flies with the learned controller (aerial_robot_control/gimbalrotor_policy_controller + script/policy_node.py
+       on policy_file, trained in /mnt/workspace/gimbalrotor_mjlab). The PID stays inside as the fallback: the policy
+       only acts while policy/enable is true (policy_enable at start) and its commands are fresh; publish
+       `rostopic pub /gimbalrotor/policy/enable std_msgs/Bool false` to hand the flight back to the PID -->
+  <arg name="policy" default="false" />
+  <arg name="policy_file" default="$(arg config_dir)/$(arg airframe)/policy_torchscript.pt" />
+  <arg name="policy_enable" default="false" />
   <arg name="launch_arm_controller" default="$(eval arg('airframe') == 'grape_with_arm' and arg('arm_pipe'))" />
   <arg name="arm_control_rate" default="20.0" />
   <!-- realsense d435 (grape_with_arm); the camera frames are in urdf/grape_with_arm/gimbalrotor.urdf.xacro -->
@@ -87,6 +94,8 @@
              if="$(eval arg('simulation') and not arg('sim_real_control_config'))"/>
    <param if="$(eval arg('gimbal_lag_compensation') != '')" name="controller/gimbal_lag_compensation"
           value="$(arg gimbal_lag_compensation)" />
+   <param if="$(arg policy)" name="aerial_robot_control_name" value="aerial_robot_control/gimbalrotor_policy_controller" />
+   <param if="$(arg policy)" name="controller/policy/enable" value="$(arg policy_enable)" />
    <rosparam if="$(eval arg('simulation') and arg('sim_actuator_delay'))"
              file="$(arg sim_actuator_delay_file)" command="load" />
 
@@ -102,6 +111,11 @@
    <param if="$(eval arg('takeoff_height') != '')" name="navigation/takeoff_height" value="$(arg takeoff_height)" />
 
   </group>
+
+  ###########  Learned controller  ###########
+  <node if="$(arg policy)" pkg="gimbalrotor" type="policy_node.py" name="policy_node" ns="$(arg robot_ns)" output="screen" >
+    <param name="policy_file" value="$(arg policy_file)" />
+  </node>
 
   ###########  Base Platform  ###########
   <node pkg="aerial_robot_base" type="aerial_robot_base_node" name="aerial_robot_base_node" ns="$(arg robot_ns)" output="screen" >

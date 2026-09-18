@@ -51,6 +51,9 @@ include_directories(
 add_library(gimbalrotor_controller src/control/gimbalrotor_controller.cpp)
 target_link_libraries(gimbalrotor_controller ${catkin_LIBRARIES})
 
+add_library(gimbalrotor_policy_controller src/control/gimbalrotor_policy_controller.cpp)
+target_link_libraries(gimbalrotor_policy_controller gimbalrotor_controller ${catkin_LIBRARIES})
+
 add_library(gimbalrotor_robot_model src/model/gimbalrotor_robot_model.cpp)
 target_link_libraries(gimbalrotor_robot_model ${catkin_LIBRARIES})
 

@@ -9,6 +9,15 @@ controller:
   # actuator delays), where the limit kept the landing drift and the liftoff tilt smaller
   gimbal_angle_limit: 0.785
 
+  # the learned controller (bringup.launch policy:=true, aerial_robot_control/gimbalrotor_policy_controller):
+  # the policy's command replaces the PID's thrusts and gimbal angles only while policy/enable is true and
+  # the last command of policy_node.py is at most timeout [s] old; the PID flies otherwise
+  policy:
+    enable: false
+    timeout: 0.02
+    thrust_max: 30.0
+    landed_height: 0.05
+
   xy:
     # takeoff: no x / y control until 5 cm above the height at arming; on the ground the robot slid and
     # turned forward under it as it got light (2026-09-18)
